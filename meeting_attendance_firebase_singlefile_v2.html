@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2025년 추계 계모임 참석 현황</title>
+  <!-- React via CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { margin:0; padding:0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif; }
+  </style>
+
+  <!-- Firebase (compat for simplicity in single-file) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useEffect, useMemo, useRef, useState } = React;
+
+    // Lucide-like SVG icons
+    const CheckCircle = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+    const XCircle = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    );
+    const Users = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+      </svg>
+    );
+    const Calendar = ({ className }) => (
+      <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      </svg>
+    );
+
+    // ===== Firebase Init (fill these placeholders) =====
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID",
+    };
+    let firestore = null;
+    let authReady = false;
+    try {
+      if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+      }
+      const auth = firebase.auth();
+      firestore = firebase.firestore();
+      auth.signInAnonymously().then(()=>{ authReady = true; }).catch(console.error);
+    } catch (e) {
+      console.error('Firebase 초기화 실패:', e);
+    }
+    // ================================================
+
+    function MeetingAttendance() {
+      const [members, setMembers] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [error, setError] = useState('');
+
+      const DEFAULT_MEMBERS = [
+        '이경득','이경률','김주식','이경석','반병주','정성대','이경호',
+        '김금순','이재성','이동관','한석원','강양수','황두호','이성근','이경수','이경철'
+      ].map((name, i) => ({ id: i+1, name, attendance:'', count:'', note:'' }));
+
+      const collectionName = 'attendance_2025';
+      const docId = 'autumn';
+
+      const saveTimer = useRef(null);
+
+      useEffect(() => {
+        let unsub = null;
+        (async () => {
+          if (!firestore) {
+            setError('⚠️ Firebase 설정이 필요합니다. 상단 스크립트의 firebaseConfig 값을 채워주세요.');
+            setMembers(DEFAULT_MEMBERS);
+            setLoading(false);
+            return;
+          }
+          try {
+            const ref = firestore.collection(collectionName).doc(docId);
+            const snap = await ref.get();
+            if (!snap.exists) {
+              await ref.set({ members: DEFAULT_MEMBERS, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+            }
+            unsub = ref.onSnapshot(ds => {
+              const data = ds.data();
+              if (data?.members) setMembers(data.members);
+              setLoading(false);
+            });
+          } catch (e) {
+            console.error(e);
+            setError('데이터를 불러오는 중 오류가 발생했습니다.');
+            setMembers(DEFAULT_MEMBERS);
+            setLoading(false);
+          }
+        })();
+        return () => { if (unsub) unsub(); };
+      }, []);
+
+      const updateMember = (id, field, value) => {
+        const updated = members.map(m => m.id === id ? { ...m, [field]: value } : m);
+        setMembers(updated);
+        if (!firestore) return;
+        clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(async () => {
+          try {
+            await firestore.collection(collectionName).doc(docId).update({
+              members: updated,
+              updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            });
+          } catch (e) { console.error('저장 실패:', e); }
+        }, 250);
+      };
+
+      const stats = (() => {
+        const attending = members.filter(m => m.attendance === '참석');
+        const notAttending = members.filter(m => m.attendance === '불참');
+        const pending = members.filter(m => !m.attendance);
+        const totalAttending = attending.reduce((s, m) => s + (parseInt(m.count || '0', 10) || 0), 0);
+        return { attending: attending.length, notAttending: notAttending.length, pending: pending.length, totalAttending };
+      })();
+
+      if (loading) {
+        return <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center"><div className="text-xl text-gray-600">로딩 중...</div></div>;
+      }
+
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+          <div className="max-w-4xl mx-auto">
+            {/* 헤더 */}
+            <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-3">
+                  <Calendar className="w-8 h-8 text-indigo-600" />
+                  <h1 className="text-3xl font-bold text-gray-800">2025년 추계 계모임</h1>
+                </div>
+                <div className="text-right text-sm md:text-base text-indigo-700 font-semibold">
+                  모임일시 : 2025. 11. 22(토) 12:00
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-gray-600">
+                <p>참석 여부를 선택하고 인원수와 비고사항을 입력해주세요</p>
+                <div className="text-xs text-gray-400">실시간 저장</div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="mb-4 p-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-800 text-sm">
+                {error}
+              </div>
+            )}
+
+            {/* 통계 */}
+            {/* 총 참석 인원 표시 */}
+<div className="text-right mb-2 text-lg font-semibold text-indigo-700">  👥 참석 인원 총계 : {stats.totalAttending}명</div>
+
+<div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="bg-green-50 rounded-xl p-4 border-2 border-green-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                  <span className="text-lg font-semibold text-green-800">참석</span>
+                </div>
+                <div className="text-3xl font-bold text-green-600">{stats.attending}명</div>
+                <div className="text-sm text-green-700 mt-1">총 {stats.totalAttending}명</div>
+              </div>
+              
+              <div className="bg-red-50 rounded-xl p-4 border-2 border-red-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <XCircle className="w-6 h-6 text-red-600" />
+                  <span className="text-lg font-semibold text-red-800">불참</span>
+                </div>
+                <div className="text-3xl font-bold text-red-600">{stats.notAttending}명</div>
+              </div>
+
+              <div className="bg-gray-50 rounded-xl p-4 border-2 border-gray-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Users className="w-6 h-6 text-gray-600" />
+                  <span className="text-lg font-semibold text-gray-800">미응답</span>
+                </div>
+                <div className="text-3xl font-bold text-gray-600">{stats.pending}명</div>
+              </div>
+            </div>
+
+            {/* 표 */}
+            <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-indigo-600 text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left">순번</th>
+                      <th className="px-4 py-3 text-left">회원명</th>
+                      <th className="px-4 py-3 text-center">참석 여부</th>
+                      <th className="px-4 py-3 text-center">인원</th>
+                      <th className="px-4 py-3 text-left">비고</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {members.map((m, i) => (
+                      <tr key={m.id} className="border-b hover:bg-gray-50 transition">
+                        <td className="px-4 py-4 font-semibold text-gray-700">{i + 1}</td>
+                        <td className="px-4 py-4 font-medium text-gray-800">{m.name}</td>
+                        <td className="px-4 py-4">
+                          <div className="flex gap-2 justify-center">
+                            <button
+                              onClick={() => updateMember(m.id, 'attendance', '참석')}
+                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center gap-1 ${m.attendance === '참석' ? 'bg-green-500 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-green-100'}`}
+                            >
+                              <CheckCircle className="w-4 h-4" /> 참석
+                            </button>
+                            <button
+                              onClick={() => updateMember(m.id, 'attendance', '불참')}
+                              className={`px-4 py-2 rounded-lg font-medium transition flex items-center gap-1 ${m.attendance === '불참' ? 'bg-red-500 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-red-100'}`}
+                            >
+                              <XCircle className="w-4 h-4" /> 불참
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="number" min="1"
+                            value={m.attendance === '불참' ? '' : (m.count || '')}
+                            onChange={(e) => updateMember(m.id, 'count', e.target.value)}
+                            disabled={m.attendance !== '참석'}
+                            placeholder="인원"
+                            className={`w-20 px-3 py-2 border-2 rounded-lg text-center font-semibold focus:outline-none focus:border-indigo-500 ${m.attendance !== '참석' ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 bg-white'}`}
+                          />
+                        </td>
+                        <td className="px-4 py-4">
+                          <input
+                            type="text" value={m.note || ''}
+                            onChange={(e) => updateMember(m.id, 'note', e.target.value)}
+                            placeholder="비고사항 입력"
+                            className="w-full px-3 py-2 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 안내 */}
+            <div className="mt-6 bg-yellow-50 border-2 border-yellow-200 rounded-xl p-4">
+              <div className="flex items-start gap-2">
+                <Users className="w-5 h-5 text-yellow-600 mt-0.5" />
+                <div className="text-sm text-yellow-800">
+                  <p className="font-semibold mb-1">📢 총무 공지</p>
+                  <p>참석 여부와 인원수를 정확히 입력해주시면 식당 예약에 큰 도움이 됩니다.</p>
+                  <p className="mt-1">✅ 변경사항은 자동 저장 · 모든 인원이 실시간 공유됩니다.</p>
+                  <p className="mt-1">✅ 이 링크를 카톡에 공유하세요. (로그인 불필요)</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<MeetingAttendance />, document.getElementById('root'));
+  </script>
+</body>
+</html>
