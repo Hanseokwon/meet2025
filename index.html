@@ -13,6 +13,7 @@
     .btn-green { background:#059669; color:white; }
     .btn-green:hover { background:#047857; }
     .btn-gray { background:#d1d5db; color:#4b5563; cursor:not-allowed; }
+    .btn-outline { border:1px solid #c7d2fe; color:#4f46e5; background:#eef2ff; }
   </style>
 </head>
 <body class="min-h-screen p-4 sm:p-6">
@@ -28,6 +29,8 @@
       </div>
       <div class="flex items-center gap-2">
         <span class="badge bg-indigo-50 text-indigo-600 border border-indigo-200">실시간 저장</span>
+        <!-- 관리자 초기화 버튼 -->
+        <button id="resetAll" class="px-3 py-1 rounded-lg btn-outline">관리자 초기화</button>
       </div>
     </div>
 
@@ -61,33 +64,24 @@
     </div>
 
     <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
-      ✅ 규칙: <b>하루 1번만 제출 가능</b>, 다음 날부터 <b>마감일(2025-11-07)</b> 전까지 수정 가능, <b>마감일 이후 전면 불가</b><br>
-      🔄 화면은 항상 <b>“선택/공백”</b>으로 보이지만, <b>오늘 제출/마감 경과 행은 빈칸 상태로 잠금</b>됩니다.<br>
-      📊 상단 통계는 <b>DB 실제값 + 사용자의 미확정(임시) 선택</b>까지 합산해 즉시 반영됩니다.
+      ✅ 규칙: <b>하루 1번만 제출 가능</b> · <b>마감일(2025-11-07) 이후 전면 불가</b><br>
+      🔄 화면은 항상 <b>“선택/공백”</b>으로 보이지만, 오늘 제출/마감 행은 빈칸 상태로 잠금됩니다.<br>
+      📊 통계는 <b>DB 값 + 미확정(임시) 입력</b>까지 합산해 즉시 반영됩니다.
     </div>
   </div>
 
   <!-- Firebase + 앱 로직 -->
   <script type="module">
-    // ----------------------------
-    // 0) 환경설정
-    // ----------------------------
-    const DEADLINE = '2025-11-07'; // YYYY-MM-DD (Asia/Seoul)
-    const DISPLAY_BLANK_ALWAYS = true; // 전원 화면 표시는 항상 '선택/공백'
-
+    // ====== 환경 ======
+    const DEADLINE = '2025-11-07';
     function getSeoulDate() {
-      const now = new Date();
-      const fmt = new Intl.DateTimeFormat('sv-SE', {
-        timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit'
-      });
-      return fmt.format(now); // "YYYY-MM-DD"
+      const fmt = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
+      return fmt.format(new Date());
     }
     const today = getSeoulDate();
     const pastDeadline = today > DEADLINE;
 
-    // ----------------------------
-    // 1) Firebase 설정(고정)
-    // ----------------------------
+    // ====== Firebase ======
     const firebaseConfig = {
       apiKey: "AIzaSyDQhi3QSFY-vE2x75ehBntmjG1BrYIVIH0",
       authDomain: "meet2025-2f126.firebaseapp.com",
@@ -96,229 +90,136 @@
       messagingSenderId: "908909912507",
       appId: "1:908909912507:web:de10a11c099c9754c6385e"
     };
+    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js');
+    const { getFirestore, doc, setDoc, onSnapshot, getDoc, writeBatch } =
+      await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
 
-    // ----------------------------
-    // 2) 명단
-    // ----------------------------
-    const initialMembers = [
+    // ====== 명단 ======
+    const members = [
       { id: 1, name: '이경득' }, { id: 2, name: '이경률' }, { id: 3, name: '김주식' }, { id: 4, name: '이경석' },
       { id: 5, name: '반병주' }, { id: 6, name: '정성대' }, { id: 7, name: '이경호' }, { id: 8, name: '김금순' },
       { id: 9, name: '이재성' }, { id: 10, name: '이동관' }, { id: 11, name: '한석원' }, { id: 12, name: '강양수' },
       { id: 13, name: '황두호' }, { id: 14, name: '이성근' }, { id: 15, name: '이경수' }, { id: 16, name: '이경철' }
     ];
+    const COL = 'meeting-data-2025';
 
-    const COL_NAME = 'meeting-data-2025';
+    // ====== 상태 ======
+    const dbMap = {};
+    const uiOverride = {};
     const memberBody = document.getElementById('memberBody');
     const attendCountEl = document.getElementById('attendCount');
     const absentCountEl = document.getElementById('absentCount');
     const pendingCountEl = document.getElementById('pendingCount');
     const totalPeopleEl = document.getElementById('totalPeople');
 
-    // ----------------------------
-    // 3) Firebase 초기화
-    // ----------------------------
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js');
-    const { getFirestore, doc, setDoc, onSnapshot, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    function setBtnState(btn, enabled){ btn.disabled=!enabled; btn.classList.toggle('btn-gray',!enabled); btn.classList.toggle('btn-green',enabled); }
 
-    // ----------------------------
-    // 4) 상태 맵
-    // ----------------------------
-    // dbMap: 실시간 DB 값
-    // uiOverride: 사용자가 아직 저장하지 않은(확인 전) 임시 선택/인원
-    const dbMap = {};       // { [id]: {attendance, count, lastSubmitted} }
-    const uiOverride = {};  // { [id]: {attendance?, count?} }
-
-    // ----------------------------
-    // 5) 유틸
-    // ----------------------------
-    function setBtnState(btn, enabled) {
-      if (enabled) {
-        btn.disabled = false;
-        btn.classList.remove('btn-gray');
-        btn.classList.add('btn-green');
-      } else {
-        btn.disabled = true;
-        btn.classList.remove('btn-green');
-        btn.classList.add('btn-gray');
-      }
-    }
-
-    // 통계 계산: DB값 + 임시값 합산(잠긴 행은 임시값 무시)
-    function recomputeStats() {
-      let attending = 0, absent = 0, pending = 0, totalPax = 0;
-
-      initialMembers.forEach(m => {
-        const d = dbMap[m.id] || {};
-        const last = d.lastSubmitted || null;
-        const submittedToday = last === today;
-        const locked = submittedToday || pastDeadline;
-
-        // 기본은 DB 값
-        let att = d.attendance || '';
-        let cnt = Number(d.count || 0);
-
-        // 잠기지 않은 행이면, 임시값이 있으면 그것으로 덮어써서 통계 반영
-        if (!locked && uiOverride[m.id]) {
-          if (uiOverride[m.id].attendance !== undefined) att = uiOverride[m.id].attendance;
-          if (uiOverride[m.id].count !== undefined) cnt = Number(uiOverride[m.id].count || 0);
+    function recomputeStats(){
+      let a=0,b=0,p=0,t=0;
+      members.forEach(m=>{
+        const d=dbMap[m.id]||{};
+        const locked=(d.lastSubmitted===today)||pastDeadline;
+        let att=d.attendance||'', cnt=Number(d.count||0);
+        if(!locked && uiOverride[m.id]){
+          if(uiOverride[m.id].attendance!==undefined) att=uiOverride[m.id].attendance;
+          if(uiOverride[m.id].count!==undefined) cnt=Number(uiOverride[m.id].count||0);
         }
-
-        if (!att) pending++;
-        else if (att === '참석') { attending++; totalPax += (cnt || 0); }
-        else if (att === '불참') absent++;
+        if(!att) p++; else if(att==='참석'){ a++; t+=cnt||0; } else if(att==='불참'){ b++; }
       });
-
-      attendCountEl.textContent = attending;
-      absentCountEl.textContent = absent;
-      pendingCountEl.textContent = pending;
-      totalPeopleEl.textContent = totalPax;
+      attendCountEl.textContent=a; absentCountEl.textContent=b; pendingCountEl.textContent=p; totalPeopleEl.textContent=t;
     }
 
-    // ----------------------------
-    // 6) 렌더링
-    // ----------------------------
-    const rows = {}; // id -> { tr, sel, input, saveBtn }
-
-    function renderRows() {
-      memberBody.innerHTML = '';
-
-      initialMembers.forEach((m, idx) => {
-        const d = dbMap[m.id] || {};
-        const last = d.lastSubmitted || null;
-        const submittedToday = last === today;
-        const locked = submittedToday || pastDeadline;
-
-        // 화면 표시는 항상 '선택/공백'
-        const displayAttendance = '';
-        const displayCount = '';
-
-        const tr = document.createElement('tr');
-        tr.className = 'border-b hover:bg-gray-50';
-        tr.innerHTML = `
+    const rows={};
+    function renderRows(){
+      memberBody.innerHTML='';
+      members.forEach((m,idx)=>{
+        const d=dbMap[m.id]||{};
+        const locked=(d.lastSubmitted===today)||pastDeadline;
+        const tr=document.createElement('tr');
+        tr.className='border-b hover:bg-gray-50';
+        tr.innerHTML=`
           <td class="px-4 py-3">${idx+1}</td>
           <td class="px-4 py-3 font-medium">${m.name}</td>
           <td class="px-4 py-3 text-center">
-            <select class="border rounded-lg px-2 py-1" ${locked ? 'disabled' : ''}>
+            <select class="border rounded-lg px-2 py-1" ${locked?'disabled':''}>
               <option value="" selected>선택</option>
               <option value="참석">참석</option>
               <option value="불참">불참</option>
             </select>
           </td>
           <td class="px-4 py-3 text-center">
-            <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center"
-              ${locked ? 'disabled' : ''} value="${displayCount}" placeholder="" />
+            <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center" ${locked?'disabled':''} value="" />
           </td>
           <td class="px-4 py-3 text-center">
-            <button class="saveBtn px-3 py-1 rounded-lg ${locked ? 'btn-gray' : 'btn-green'}"
-              ${locked ? 'disabled' : ''}>확인</button>
-          </td>
-        `;
+            <button class="saveBtn px-3 py-1 rounded-lg ${locked?'btn-gray':'btn-green'}" ${locked?'disabled':''}>확인</button>
+          </td>`;
+        const sel=tr.querySelector('select');
+        const input=tr.querySelector('input');
+        const saveBtn=tr.querySelector('.saveBtn');
 
-        const sel = tr.querySelector('select');
-        const input = tr.querySelector('input');
-        const saveBtn = tr.querySelector('.saveBtn');
-
-        // 이벤트: 화면 선택 시 임시 상태에 반영하고 통계 재계산
-        if (!locked) {
-          sel.addEventListener('change', () => {
-            uiOverride[m.id] = uiOverride[m.id] || {};
-            uiOverride[m.id].attendance = sel.value;
-
-            if (sel.value === '참석') {
-              input.disabled = false;
-              if (!input.value) input.value = '';
-            } else {
-              input.value = '';
-              input.disabled = true;
-              uiOverride[m.id].count = undefined; // 참석이 아니면 인원 제거
-            }
+        if(!locked){
+          sel.addEventListener('change',()=>{
+            uiOverride[m.id]=uiOverride[m.id]||{};
+            uiOverride[m.id].attendance=sel.value;
+            if(sel.value==='참석'){ input.disabled=false; } else { input.value=''; input.disabled=true; uiOverride[m.id].count=undefined; }
             recomputeStats();
           });
-
-          input.addEventListener('input', () => {
-            uiOverride[m.id] = uiOverride[m.id] || {};
-            // 참석이 선택된 경우만 카운트 반영
-            if (sel.value === '참석') {
-              uiOverride[m.id].count = input.value;
-            }
+          input.addEventListener('input',()=>{
+            uiOverride[m.id]=uiOverride[m.id]||{};
+            if(sel.value==='참석'){ uiOverride[m.id].count=input.value; }
             recomputeStats();
           });
         }
 
-        rows[m.id] = { tr, sel, input, saveBtn, meta: { last, locked } };
+        rows[m.id]={sel,input,saveBtn};
         memberBody.appendChild(tr);
       });
-
-      // 처음 렌더링 시에도 통계 갱신
       recomputeStats();
     }
 
-    // ----------------------------
-    // 7) 실시간 구독 (DB → 화면/통계)
-    // ----------------------------
-    initialMembers.forEach(m => {
-      const ref = doc(db, COL_NAME, String(m.id));
-      onSnapshot(ref, (snap) => {
-        dbMap[m.id] = snap.exists() ? snap.data() : {};
-        renderRows();          // 화면 재구성
+    // 실시간 구독
+    members.forEach(m=>{
+      onSnapshot(doc(db,COL,String(m.id)),(snap)=>{
+        dbMap[m.id]=snap.exists()?snap.data():{};
+        renderRows();
       });
     });
 
-    // ----------------------------
-    // 8) 저장(일 1회 제한 + 마감)
-    // ----------------------------
-    memberBody.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.saveBtn');
-      if (!btn) return;
+    // 저장
+    memberBody.addEventListener('click', async (e)=>{
+      const btn=e.target.closest('.saveBtn'); if(!btn) return;
+      const tr=btn.closest('tr'); const idx=[...memberBody.children].indexOf(tr); const m=members[idx];
+      const {sel,input,saveBtn}=rows[m.id];
 
-      const tr = btn.closest('tr');
-      const idx = [...memberBody.children].indexOf(tr);
-      const member = initialMembers[idx];
-      const { sel, input, saveBtn, meta } = rows[member.id];
+      if(pastDeadline){ alert('마감일(2025-11-07) 이후에는 제출할 수 없습니다.'); setBtnState(saveBtn,false); sel.disabled=true; input.disabled=true; return; }
+      const ref=doc(db,COL,String(m.id)); const cur=await getDoc(ref); const last=cur.exists()?(cur.data().lastSubmitted||null):null;
+      if(last===today){ alert('하루 1번만 제출할 수 있습니다. (오늘 이미 제출됨)'); setBtnState(saveBtn,false); sel.disabled=true; input.disabled=true; return; }
 
-      // 마감 후 전면 금지
-      if (pastDeadline) {
-        alert('마감일(2025-11-07) 이후에는 수정/제출할 수 없습니다.');
-        setBtnState(saveBtn, false);
-        sel.disabled = true; input.disabled = true;
-        return;
-      }
+      const attendance=sel.value; const count=attendance==='참석'?Number(input.value||0):0;
+      if(!attendance){ alert('참석/불참을 선택해주세요.'); return; }
+      if(attendance==='참석' && (!count||count<1)){ alert('인원을 1 이상 입력해주세요.'); return; }
 
-      // 오늘 이미 제출했는지 서버 조회(이중체크)
-      const ref = doc(db, COL_NAME, String(member.id));
-      const cur = await getDoc(ref);
-      const last = cur.exists() ? (cur.data().lastSubmitted || null) : null;
-      if (last === today) {
-        alert('하루 1번만 제출할 수 있습니다. (오늘 이미 제출됨)');
-        setBtnState(saveBtn, false);
-        sel.disabled = true; input.disabled = true;
-        return;
-      }
+      await setDoc(ref,{ name:m.name, attendance, count, lastSubmitted:today, updatedAt:new Date().toISOString() },{merge:true});
+      sel.disabled=true; input.disabled=true; setBtnState(saveBtn,false);
+      delete uiOverride[m.id]; recomputeStats();
+    });
 
-      const attendance = sel.value;
-      const count = attendance === '참석' ? Number(input.value || 0) : 0;
-      if (!attendance) { alert('참석/불참을 선택해주세요.'); return; }
-      if (attendance === '참석' && (!count || count < 1)) { alert('인원을 1 이상 입력해주세요.'); return; }
-
-      const payload = {
-        name: member.name,
-        attendance,
-        count,
-        lastSubmitted: today,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(ref, payload, { merge: true });
-
-      // 오늘은 즉시 잠금
-      sel.disabled = true;
-      input.disabled = true;
-      setBtnState(saveBtn, false);
-
-      // 임시값 제거(통계는 곧바로 DB 스냅샷에 의해 갱신됨)
-      delete uiOverride[member.id];
-      recomputeStats();
+    // ===== 관리자 초기화 =====
+    document.getElementById('resetAll').addEventListener('click', async ()=>{
+      const code=prompt('관리자 비밀번호를 입력하세요','');
+      if(code!=='1122'){ alert('비밀번호가 맞지 않습니다.'); return; }
+      if(!confirm('전체 초기화 하시겠습니까?\n(모든 참석/인원/오늘제출표시가 지워지고 모두 활성화됩니다)')) return;
+      const batch=writeBatch(db);
+      members.forEach(m=>{
+        batch.set(doc(db,COL,String(m.id)),
+          { attendance:null, count:null, lastSubmitted:null, updatedAt:new Date().toISOString() },
+          { merge:true });
+      });
+      await batch.commit();
+      Object.keys(uiOverride).forEach(k=>delete uiOverride[k]);
+      alert('초기화 완료');
     });
 
     // 초기 렌더
