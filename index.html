@@ -1,229 +1,78 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>2025년 추계 계모임 참석 현황</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { background: linear-gradient(135deg,#eef2ff,#e0e7ff); }
-    .card { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
-    .badge { font-size:.8rem; padding:.2rem .5rem; border-radius:.5rem; }
-    .pill { border-radius: 1rem; }
-    .btn-green { background:#059669; color:white; }
-    .btn-green:hover { background:#047857; }
-    .btn-gray { background:#d1d5db; color:#4b5563; cursor:not-allowed; }
-    .btn-outline { border:1px solid #c7d2fe; color:#4f46e5; background:#eef2ff; }
-  </style>
-</head>
-<body class="min-h-screen p-4 sm:p-6">
-  <div class="max-w-5xl mx-auto">
-    <!-- 헤더 -->
-    <div class="bg-white card rounded-2xl p-5 flex items-start justify-between gap-3">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="text-indigo-600 text-2xl">📅</span>
-          <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-800">2025년 추계 계모임</h1>
-        </div>
-        <p class="text-sm text-gray-500 mt-1">모임일시 : <b>2025. 11. 22(토) 12:00</b></p>
-      </div>
-      <div class="flex items-center gap-2">
-        <span class="badge bg-indigo-50 text-indigo-600 border border-indigo-200">실시간 저장</span>
-        <!-- 관리자 초기화 버튼 -->
-        <button id="resetAll" class="px-3 py-1 rounded-lg btn-outline">관리자 초기화</button>
-      </div>
-    </div>
+function renderRows(){
+  memberBody.innerHTML='';
+  const local = getLocalSubmit();
 
-    <!-- 통계 -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-      <div class="bg-green-50 text-green-700 border border-green-200 pill p-3 text-center font-semibold">
-        참석 <span id="attendCount">0</span>명 · 총 <span id="totalPeople">0</span>명
-      </div>
-      <div class="bg-rose-50 text-rose-700 border border-rose-200 pill p-3 text-center font-semibold">
-        불참 <span id="absentCount">0</span>명
-      </div>
-      <div class="bg-gray-50 text-gray-700 border border-gray-200 pill p-3 text-center font-semibold">
-        미응답 <span id="pendingCount">0</span>명
-      </div>
-    </div>
+  members.forEach((m, idx)=>{
+    const d = dbMap[m.id] || {};
+    const submittedToday = (d.lastSubmitted === today);
+    const lockedByDB = submittedToday || pastDeadline;
+    const lockedByLocal = local && local.memberId !== m.id;  // 오늘 다른 사람 제출
+    const rowLocked = lockedByDB || lockedByLocal;
 
-    <!-- 표 -->
-    <div class="bg-white card rounded-2xl mt-4 overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-indigo-600 text-white">
-          <tr>
-            <th class="px-4 py-3 text-left w-16">번호</th>
-            <th class="px-4 py-3 text-left">이름</th>
-            <th class="px-4 py-3 text-center w-40">참석</th>
-            <th class="px-4 py-3 text-center w-28">인원</th>
-            <th class="px-4 py-3 text-center w-28">확인</th>
-          </tr>
-        </thead>
-        <tbody id="memberBody"></tbody>
-      </table>
-    </div>
+    // 잠긴 행은 DB값 그대로, 그 외는 빈값(선택/공백)
+    const displayAttendance = rowLocked && d.attendance ? d.attendance : '';
+    const displayCount = rowLocked && d.attendance==='참석' ? String(d.count ?? '') : '';
 
-    <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
-      ✅ 규칙: <b>하루 1번만 제출 가능</b> · <b>마감일(2025-11-07) 이후 전면 불가</b><br>
-      🔄 화면은 항상 <b>“선택/공백”</b>으로 보이지만, 오늘 제출/마감 행은 빈칸 상태로 잠금됩니다.<br>
-      📊 통계는 <b>DB 값 + 미확정(임시) 입력</b>까지 합산해 즉시 반영됩니다.
-    </div>
-  </div>
+    const tr = document.createElement('tr');
+    tr.className='border-b hover:bg-gray-50';
 
-  <!-- Firebase + 앱 로직 -->
-  <script type="module">
-    // ====== 환경 ======
-    const DEADLINE = '2025-11-07';
-    function getSeoulDate() {
-      const fmt = new Intl.DateTimeFormat('sv-SE', {timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
-      return fmt.format(new Date());
-    }
-    const today = getSeoulDate();
-    const pastDeadline = today > DEADLINE;
+    tr.innerHTML = `
+      <td class="px-4 py-3">${idx+1}</td>
+      <td class="px-4 py-3 font-medium">${m.name}</td>
+      <td class="px-4 py-3 text-center">
+        <select class="border rounded-lg px-2 py-1" ${rowLocked?'disabled':''}>
+          <option value="" ${displayAttendance===''?'selected':''}>선택</option>
+          <option value="참석" ${displayAttendance==='참석'?'selected':''}>참석</option>
+          <option value="불참" ${displayAttendance==='불참'?'selected':''}>불참</option>
+        </select>
+      </td>
+      <td class="px-4 py-3 text-center">
+        <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center"
+               ${rowLocked?'disabled':''}
+               value="${displayCount}" />
+      </td>
+      <td class="px-4 py-3 text-center">
+        <button class="saveBtn px-3 py-1 rounded-lg ${rowLocked?'btn-gray':'btn-green'}"
+          ${rowLocked?'disabled':''}>확인</button>
+      </td>
+    `;
 
-    // ====== Firebase ======
-    const firebaseConfig = {
-      apiKey: "AIzaSyDQhi3QSFY-vE2x75ehBntmjG1BrYIVIH0",
-      authDomain: "meet2025-2f126.firebaseapp.com",
-      projectId: "meet2025-2f126",
-      storageBucket: "meet2025-2f126.firebasestorage.app",
-      messagingSenderId: "908909912507",
-      appId: "1:908909912507:web:de10a11c099c9754c6385e"
-    };
-    const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js');
-    const { getFirestore, doc, setDoc, onSnapshot, getDoc, writeBatch } =
-      await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
+    const sel = tr.querySelector('select');
+    const input = tr.querySelector('input');
+    const saveBtn = tr.querySelector('.saveBtn');
 
-    // ====== 명단 ======
-    const members = [
-      { id: 1, name: '이경득' }, { id: 2, name: '이경률' }, { id: 3, name: '김주식' }, { id: 4, name: '이경석' },
-      { id: 5, name: '반병주' }, { id: 6, name: '정성대' }, { id: 7, name: '이경호' }, { id: 8, name: '김금순' },
-      { id: 9, name: '이재성' }, { id: 10, name: '이동관' }, { id: 11, name: '한석원' }, { id: 12, name: '강양수' },
-      { id: 13, name: '황두호' }, { id: 14, name: '이성근' }, { id: 15, name: '이경수' }, { id: 16, name: '이경철' }
-    ];
-    const COL = 'meeting-data-2025';
-
-    // ====== 상태 ======
-    const dbMap = {};
-    const uiOverride = {};
-    const memberBody = document.getElementById('memberBody');
-    const attendCountEl = document.getElementById('attendCount');
-    const absentCountEl = document.getElementById('absentCount');
-    const pendingCountEl = document.getElementById('pendingCount');
-    const totalPeopleEl = document.getElementById('totalPeople');
-
-    function setBtnState(btn, enabled){ btn.disabled=!enabled; btn.classList.toggle('btn-gray',!enabled); btn.classList.toggle('btn-green',enabled); }
-
-    function recomputeStats(){
-      let a=0,b=0,p=0,t=0;
-      members.forEach(m=>{
-        const d=dbMap[m.id]||{};
-        const locked=(d.lastSubmitted===today)||pastDeadline;
-        let att=d.attendance||'', cnt=Number(d.count||0);
-        if(!locked && uiOverride[m.id]){
-          if(uiOverride[m.id].attendance!==undefined) att=uiOverride[m.id].attendance;
-          if(uiOverride[m.id].count!==undefined) cnt=Number(uiOverride[m.id].count||0);
-        }
-        if(!att) p++; else if(att==='참석'){ a++; t+=cnt||0; } else if(att==='불참'){ b++; }
+    // 오늘 다른 사람 제출로 잠긴 경우: 터치 시 안내
+    if(!lockedByDB && lockedByLocal){
+      ['change','focus','click','input'].forEach(ev=>{
+        sel.addEventListener(ev, ()=>{
+          const who = members.find(x=>x.id===local.memberId)?.name || '다른 회원';
+          alert(`오늘은 이미 "${who}" 이름으로 제출하셨습니다.\n하루에 한 사람만 제출할 수 있습니다.`);
+        });
+        input.addEventListener(ev, ()=>{
+          const who = members.find(x=>x.id===local.memberId)?.name || '다른 회원';
+          alert(`오늘은 이미 "${who}" 이름으로 제출하셨습니다.\n하루에 한 사람만 제출할 수 있습니다.`);
+        });
       });
-      attendCountEl.textContent=a; absentCountEl.textContent=b; pendingCountEl.textContent=p; totalPeopleEl.textContent=t;
     }
 
-    const rows={};
-    function renderRows(){
-      memberBody.innerHTML='';
-      members.forEach((m,idx)=>{
-        const d=dbMap[m.id]||{};
-        const locked=(d.lastSubmitted===today)||pastDeadline;
-        const tr=document.createElement('tr');
-        tr.className='border-b hover:bg-gray-50';
-        tr.innerHTML=`
-          <td class="px-4 py-3">${idx+1}</td>
-          <td class="px-4 py-3 font-medium">${m.name}</td>
-          <td class="px-4 py-3 text-center">
-            <select class="border rounded-lg px-2 py-1" ${locked?'disabled':''}>
-              <option value="" selected>선택</option>
-              <option value="참석">참석</option>
-              <option value="불참">불참</option>
-            </select>
-          </td>
-          <td class="px-4 py-3 text-center">
-            <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center" ${locked?'disabled':''} value="" />
-          </td>
-          <td class="px-4 py-3 text-center">
-            <button class="saveBtn px-3 py-1 rounded-lg ${locked?'btn-gray':'btn-green'}" ${locked?'disabled':''}>확인</button>
-          </td>`;
-        const sel=tr.querySelector('select');
-        const input=tr.querySelector('input');
-        const saveBtn=tr.querySelector('.saveBtn');
-
-        if(!locked){
-          sel.addEventListener('change',()=>{
-            uiOverride[m.id]=uiOverride[m.id]||{};
-            uiOverride[m.id].attendance=sel.value;
-            if(sel.value==='참석'){ input.disabled=false; } else { input.value=''; input.disabled=true; uiOverride[m.id].count=undefined; }
-            recomputeStats();
-          });
-          input.addEventListener('input',()=>{
-            uiOverride[m.id]=uiOverride[m.id]||{};
-            if(sel.value==='참석'){ uiOverride[m.id].count=input.value; }
-            recomputeStats();
-          });
-        }
-
-        rows[m.id]={sel,input,saveBtn};
-        memberBody.appendChild(tr);
+    if(!rowLocked){
+      sel.addEventListener('change',()=>{
+        uiOverride[m.id]=uiOverride[m.id]||{};
+        uiOverride[m.id].attendance = sel.value;
+        if(sel.value==='참석'){ input.disabled=false; }
+        else { input.value=''; input.disabled=true; uiOverride[m.id].count=undefined; }
+        recomputeStats();
       });
-      recomputeStats();
+      input.addEventListener('input',()=>{
+        uiOverride[m.id]=uiOverride[m.id]||{};
+        if(sel.value==='참석'){ uiOverride[m.id].count = input.value; }
+        recomputeStats();
+      });
     }
 
-    // 실시간 구독
-    members.forEach(m=>{
-      onSnapshot(doc(db,COL,String(m.id)),(snap)=>{
-        dbMap[m.id]=snap.exists()?snap.data():{};
-        renderRows();
-      });
-    });
+    rows[m.id]={sel,input,saveBtn};
+    memberBody.appendChild(tr);
+  });
 
-    // 저장
-    memberBody.addEventListener('click', async (e)=>{
-      const btn=e.target.closest('.saveBtn'); if(!btn) return;
-      const tr=btn.closest('tr'); const idx=[...memberBody.children].indexOf(tr); const m=members[idx];
-      const {sel,input,saveBtn}=rows[m.id];
-
-      if(pastDeadline){ alert('마감일(2025-11-07) 이후에는 제출할 수 없습니다.'); setBtnState(saveBtn,false); sel.disabled=true; input.disabled=true; return; }
-      const ref=doc(db,COL,String(m.id)); const cur=await getDoc(ref); const last=cur.exists()?(cur.data().lastSubmitted||null):null;
-      if(last===today){ alert('하루 1번만 제출할 수 있습니다. (오늘 이미 제출됨)'); setBtnState(saveBtn,false); sel.disabled=true; input.disabled=true; return; }
-
-      const attendance=sel.value; const count=attendance==='참석'?Number(input.value||0):0;
-      if(!attendance){ alert('참석/불참을 선택해주세요.'); return; }
-      if(attendance==='참석' && (!count||count<1)){ alert('인원을 1 이상 입력해주세요.'); return; }
-
-      await setDoc(ref,{ name:m.name, attendance, count, lastSubmitted:today, updatedAt:new Date().toISOString() },{merge:true});
-      sel.disabled=true; input.disabled=true; setBtnState(saveBtn,false);
-      delete uiOverride[m.id]; recomputeStats();
-    });
-
-    // ===== 관리자 초기화 =====
-    document.getElementById('resetAll').addEventListener('click', async ()=>{
-      const code=prompt('관리자 비밀번호를 입력하세요','');
-      if(code!=='1122'){ alert('비밀번호가 맞지 않습니다.'); return; }
-      if(!confirm('전체 초기화 하시겠습니까?\n(모든 참석/인원/오늘제출표시가 지워지고 모두 활성화됩니다)')) return;
-      const batch=writeBatch(db);
-      members.forEach(m=>{
-        batch.set(doc(db,COL,String(m.id)),
-          { attendance:null, count:null, lastSubmitted:null, updatedAt:new Date().toISOString() },
-          { merge:true });
-      });
-      await batch.commit();
-      Object.keys(uiOverride).forEach(k=>delete uiOverride[k]);
-      alert('초기화 완료');
-    });
-
-    // 초기 렌더
-    renderRows();
-  </script>
-</body>
-</html>
+  recomputeStats();
+}
