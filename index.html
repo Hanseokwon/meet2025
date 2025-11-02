@@ -170,30 +170,38 @@ memberBody.addEventListener('click', async (e) => {
   const saveBtn = tr.querySelector('.saveBtn');
   const editBtn = tr.querySelector('.editBtn');
 
-  // ✅ "확인" 버튼 눌렀을 때
+  // ✅ "확인" 버튼 클릭 시
   if (btn) {
     const attendance = sel.value;
     const count = attendance === '참석' ? Number(input.value || 0) : 0;
     const payload = { name: member.name, attendance, count, updatedAt: new Date().toISOString() };
     await setDoc(doc(db, COL_NAME, String(member.id)), payload, { merge: true });
 
-    // 비활성화
+    // 비활성화 처리
     sel.disabled = true;
     input.disabled = true;
     saveBtn.disabled = true;
-    saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
     editBtn.disabled = false;
-    editBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+
+    // 색상 변경
+    saveBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700', 'text-white');
+    saveBtn.classList.add('bg-gray-300', 'text-gray-600', 'cursor-not-allowed');
+    editBtn.classList.remove('bg-gray-300', 'cursor-not-allowed');
+    editBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700', 'text-white');
   }
 
-  // ✅ "수정" 버튼 눌렀을 때
+  // ✅ "수정" 버튼 클릭 시
   if (edit) {
     sel.disabled = false;
     input.disabled = (sel.value !== '참석');
     saveBtn.disabled = false;
-    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
     editBtn.disabled = true;
-    editBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+    // 색상 변경
+    editBtn.classList.remove('bg-emerald-600', 'hover:bg-emerald-700', 'text-white');
+    editBtn.classList.add('bg-gray-300', 'text-gray-600', 'cursor-not-allowed');
+    saveBtn.classList.remove('bg-gray-300', 'text-gray-600', 'cursor-not-allowed');
+    saveBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-700', 'text-white');
   }
 });
 
