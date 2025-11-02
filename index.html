@@ -157,20 +157,45 @@
       });
     });
 
-    memberBody.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.saveBtn');
-      if (!btn) return;
-      const tr = btn.closest('tr');
-      const idx = [...memberBody.children].indexOf(tr);
-      const member = initialMembers[idx];
-      const sel = rows[member.id].sel;
-      const input = rows[member.id].input;
-      const attendance = sel.value;
-      const count = attendance==='참석' ? Number(input.value||0) : 0;
-      const payload = { name: member.name, attendance, count, updatedAt: new Date().toISOString() };
-      await setDoc(doc(db, COL_NAME, String(member.id)), payload, { merge: true });
-      sel.disabled = true; input.disabled = true;
-    });
+memberBody.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.saveBtn');
+  const edit = e.target.closest('.editBtn');
+  if (!btn && !edit) return;
+
+  const tr = e.target.closest('tr');
+  const idx = [...memberBody.children].indexOf(tr);
+  const member = initialMembers[idx];
+  const sel = rows[member.id].sel;
+  const input = rows[member.id].input;
+  const saveBtn = tr.querySelector('.saveBtn');
+  const editBtn = tr.querySelector('.editBtn');
+
+  // ✅ "확인" 버튼 눌렀을 때
+  if (btn) {
+    const attendance = sel.value;
+    const count = attendance === '참석' ? Number(input.value || 0) : 0;
+    const payload = { name: member.name, attendance, count, updatedAt: new Date().toISOString() };
+    await setDoc(doc(db, COL_NAME, String(member.id)), payload, { merge: true });
+
+    // 비활성화
+    sel.disabled = true;
+    input.disabled = true;
+    saveBtn.disabled = true;
+    saveBtn.classList.add('opacity-50', 'cursor-not-allowed');
+    editBtn.disabled = false;
+    editBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+  }
+
+  // ✅ "수정" 버튼 눌렀을 때
+  if (edit) {
+    sel.disabled = false;
+    input.disabled = (sel.value !== '참석');
+    saveBtn.disabled = false;
+    saveBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+    editBtn.disabled = true;
+    editBtn.classList.add('opacity-50', 'cursor-not-allowed');
+  }
+});
 
     // 초기 렌더
     renderRows({});
