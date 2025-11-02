@@ -40,7 +40,7 @@
         불참 <span id="absentCount">0</span>명
       </div>
       <div class="bg-gray-50 text-gray-700 border border-gray-200 pill p-3 text-center font-semibold">
-        미응답 <span id="pendingCount">16</span>명
+        미응답 <span id="pendingCount">0</span>명
       </div>
     </div>
 
@@ -61,9 +61,9 @@
     </div>
 
     <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
-      ✅ 규칙: <b>하루 1번만 제출 가능</b>, 다음 날부터 <b>마감일(2025-11-07)</b> 전까지는 수정 가능, <b>마감일 이후 수정/제출 불가</b><br>
-      🔄 화면은 <b>전원 “선택/공백”</b>으로 표시되지만, <b>오늘 제출/마감 경과 행은 빈칸 상태로 잠금(회색)</b>됩니다.  
-      📊 상단 통계는 <b>DB 실제값</b> 기준입니다.
+      ✅ 규칙: <b>하루 1번만 제출 가능</b>, 다음 날부터 <b>마감일(2025-11-07)</b> 전까지 수정 가능, <b>마감일 이후 전면 불가</b><br>
+      🔄 화면은 항상 <b>“선택/공백”</b>으로 보이지만, <b>오늘 제출/마감 경과 행은 빈칸 상태로 잠금</b>됩니다.<br>
+      📊 상단 통계는 <b>DB 실제값 + 사용자의 미확정(임시) 선택</b>까지 합산해 즉시 반영됩니다.
     </div>
   </div>
 
@@ -72,7 +72,7 @@
     // ----------------------------
     // 0) 환경설정
     // ----------------------------
-    const DEADLINE = '2025-11-07'; // YYYY-MM-DD (Asia/Seoul 기준)
+    const DEADLINE = '2025-11-07'; // YYYY-MM-DD (Asia/Seoul)
     const DISPLAY_BLANK_ALWAYS = true; // 전원 화면 표시는 항상 '선택/공백'
 
     function getSeoulDate() {
@@ -123,9 +123,16 @@
     const db = getFirestore(app);
 
     // ----------------------------
-    // 4) 렌더링
+    // 4) 상태 맵
     // ----------------------------
-    const rows = {};
+    // dbMap: 실시간 DB 값
+    // uiOverride: 사용자가 아직 저장하지 않은(확인 전) 임시 선택/인원
+    const dbMap = {};       // { [id]: {attendance, count, lastSubmitted} }
+    const uiOverride = {};  // { [id]: {attendance?, count?} }
+
+    // ----------------------------
+    // 5) 유틸
+    // ----------------------------
     function setBtnState(btn, enabled) {
       if (enabled) {
         btn.disabled = false;
@@ -138,27 +145,54 @@
       }
     }
 
-    function renderRows(dataMap = {}) {
-      memberBody.innerHTML = '';
-
-      // 통계는 DB 실제 값 기준
+    // 통계 계산: DB값 + 임시값 합산(잠긴 행은 임시값 무시)
+    function recomputeStats() {
       let attending = 0, absent = 0, pending = 0, totalPax = 0;
 
-      initialMembers.forEach((m, idx) => {
-        const d = dataMap[m.id] || {};
-        const last = d.lastSubmitted || null;          // YYYY-MM-DD
+      initialMembers.forEach(m => {
+        const d = dbMap[m.id] || {};
+        const last = d.lastSubmitted || null;
         const submittedToday = last === today;
-        const locked = submittedToday || pastDeadline; // 오늘 제출 or 마감 후 → 잠금
+        const locked = submittedToday || pastDeadline;
 
-        // ★ 화면 표시는 항상 '선택/공백'
-        const displayAttendance = DISPLAY_BLANK_ALWAYS ? '' : (locked ? (d.attendance || '') : '');
-        const displayCount = DISPLAY_BLANK_ALWAYS ? '' :
-                             ((locked && d.attendance === '참석') ? (d.count ?? '') : '');
+        // 기본은 DB 값
+        let att = d.attendance || '';
+        let cnt = Number(d.count || 0);
 
-        // 통계 (DB 기준)
-        if (!d.attendance) pending++;
-        else if (d.attendance === '참석') { attending++; totalPax += Number(d.count || 0); }
-        else if (d.attendance === '불참') { absent++; }
+        // 잠기지 않은 행이면, 임시값이 있으면 그것으로 덮어써서 통계 반영
+        if (!locked && uiOverride[m.id]) {
+          if (uiOverride[m.id].attendance !== undefined) att = uiOverride[m.id].attendance;
+          if (uiOverride[m.id].count !== undefined) cnt = Number(uiOverride[m.id].count || 0);
+        }
+
+        if (!att) pending++;
+        else if (att === '참석') { attending++; totalPax += (cnt || 0); }
+        else if (att === '불참') absent++;
+      });
+
+      attendCountEl.textContent = attending;
+      absentCountEl.textContent = absent;
+      pendingCountEl.textContent = pending;
+      totalPeopleEl.textContent = totalPax;
+    }
+
+    // ----------------------------
+    // 6) 렌더링
+    // ----------------------------
+    const rows = {}; // id -> { tr, sel, input, saveBtn }
+
+    function renderRows() {
+      memberBody.innerHTML = '';
+
+      initialMembers.forEach((m, idx) => {
+        const d = dbMap[m.id] || {};
+        const last = d.lastSubmitted || null;
+        const submittedToday = last === today;
+        const locked = submittedToday || pastDeadline;
+
+        // 화면 표시는 항상 '선택/공백'
+        const displayAttendance = '';
+        const displayCount = '';
 
         const tr = document.createElement('tr');
         tr.className = 'border-b hover:bg-gray-50';
@@ -167,15 +201,14 @@
           <td class="px-4 py-3 font-medium">${m.name}</td>
           <td class="px-4 py-3 text-center">
             <select class="border rounded-lg px-2 py-1" ${locked ? 'disabled' : ''}>
-              <option value="" ${displayAttendance==='' ? 'selected' : ''}>선택</option>
-              <option value="참석" ${displayAttendance==='참석' ? 'selected' : ''}>참석</option>
-              <option value="불참" ${displayAttendance==='불참' ? 'selected' : ''}>불참</option>
+              <option value="" selected>선택</option>
+              <option value="참석">참석</option>
+              <option value="불참">불참</option>
             </select>
           </td>
           <td class="px-4 py-3 text-center">
             <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center"
-              ${ (locked || displayAttendance!=='참석') ? 'disabled' : '' }
-              value="${displayCount}" />
+              ${locked ? 'disabled' : ''} value="${displayCount}" placeholder="" />
           </td>
           <td class="px-4 py-3 text-center">
             <button class="saveBtn px-3 py-1 rounded-lg ${locked ? 'btn-gray' : 'btn-green'}"
@@ -187,41 +220,54 @@
         const input = tr.querySelector('input');
         const saveBtn = tr.querySelector('.saveBtn');
 
-        // 참석 선택에 따라 인원 입력 활성/비활성
-        sel?.addEventListener('change', () => {
-          if (sel.value === '참석' && !locked) {
-            input.disabled = false;
-            if (!input.value) input.value = '';
-          } else {
-            input.value = '';
-            input.disabled = true;
-          }
-        });
+        // 이벤트: 화면 선택 시 임시 상태에 반영하고 통계 재계산
+        if (!locked) {
+          sel.addEventListener('change', () => {
+            uiOverride[m.id] = uiOverride[m.id] || {};
+            uiOverride[m.id].attendance = sel.value;
 
-        rows[m.id] = { tr, sel, input, saveBtn, meta: { last } };
+            if (sel.value === '참석') {
+              input.disabled = false;
+              if (!input.value) input.value = '';
+            } else {
+              input.value = '';
+              input.disabled = true;
+              uiOverride[m.id].count = undefined; // 참석이 아니면 인원 제거
+            }
+            recomputeStats();
+          });
+
+          input.addEventListener('input', () => {
+            uiOverride[m.id] = uiOverride[m.id] || {};
+            // 참석이 선택된 경우만 카운트 반영
+            if (sel.value === '참석') {
+              uiOverride[m.id].count = input.value;
+            }
+            recomputeStats();
+          });
+        }
+
+        rows[m.id] = { tr, sel, input, saveBtn, meta: { last, locked } };
         memberBody.appendChild(tr);
       });
 
-      attendCountEl.textContent = attending;
-      absentCountEl.textContent = absent;
-      pendingCountEl.textContent = pending;
-      totalPeopleEl.textContent = totalPax;
+      // 처음 렌더링 시에도 통계 갱신
+      recomputeStats();
     }
 
     // ----------------------------
-    // 5) 실시간 구독
+    // 7) 실시간 구독 (DB → 화면/통계)
     // ----------------------------
-    const map = {};
     initialMembers.forEach(m => {
       const ref = doc(db, COL_NAME, String(m.id));
       onSnapshot(ref, (snap) => {
-        map[m.id] = snap.exists() ? snap.data() : {};
-        renderRows(map);
+        dbMap[m.id] = snap.exists() ? snap.data() : {};
+        renderRows();          // 화면 재구성
       });
     });
 
     // ----------------------------
-    // 6) 제출(일 1회 제한 + 마감일 적용)
+    // 8) 저장(일 1회 제한 + 마감)
     // ----------------------------
     memberBody.addEventListener('click', async (e) => {
       const btn = e.target.closest('.saveBtn');
@@ -230,9 +276,9 @@
       const tr = btn.closest('tr');
       const idx = [...memberBody.children].indexOf(tr);
       const member = initialMembers[idx];
-      const { sel, input, saveBtn } = rows[member.id];
+      const { sel, input, saveBtn, meta } = rows[member.id];
 
-      // 마감일 이후 전면 금지
+      // 마감 후 전면 금지
       if (pastDeadline) {
         alert('마감일(2025-11-07) 이후에는 수정/제출할 수 없습니다.');
         setBtnState(saveBtn, false);
@@ -240,7 +286,7 @@
         return;
       }
 
-      // 오늘 이미 제출했는지 서버 상태 확인
+      // 오늘 이미 제출했는지 서버 조회(이중체크)
       const ref = doc(db, COL_NAME, String(member.id));
       const cur = await getDoc(ref);
       const last = cur.exists() ? (cur.data().lastSubmitted || null) : null;
@@ -260,19 +306,23 @@
         name: member.name,
         attendance,
         count,
-        lastSubmitted: today,                 // 일 1회 제한 근거
+        lastSubmitted: today,
         updatedAt: new Date().toISOString()
       };
       await setDoc(ref, payload, { merge: true });
 
-      // 오늘은 즉시 잠금 및 버튼 색상/상태 변경
+      // 오늘은 즉시 잠금
       sel.disabled = true;
       input.disabled = true;
       setBtnState(saveBtn, false);
+
+      // 임시값 제거(통계는 곧바로 DB 스냅샷에 의해 갱신됨)
+      delete uiOverride[member.id];
+      recomputeStats();
     });
 
     // 초기 렌더
-    renderRows({});
+    renderRows();
   </script>
 </body>
 </html>
