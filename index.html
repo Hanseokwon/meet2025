@@ -1,187 +1,246 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>2025년 추계 계모임 참석 현황</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <style>
-    body { margin: 0; font-family: 'Pretendard', sans-serif; }
-    .modal-bg { background: rgba(0,0,0,0.4); }
+    body { background: linear-gradient(135deg,#eef2ff,#e0e7ff); }
+    .card { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
+    .badge { font-size:.8rem; padding:.2rem .5rem; border-radius:.5rem; }
+    .pill { border-radius: 1rem; }
+    .hidden { display:none; }
   </style>
 </head>
-<body class="bg-gradient-to-br from-blue-50 to-indigo-100">
-  <div id="root"></div>
-
-  <script type="text/babel">
-
-    const { useState, useEffect, useRef } = React;
-
-    function App() {
-      const [config, setConfig] = useState(() => {
-        const saved = localStorage.getItem("firebaseConfig");
-        return saved ? JSON.parse(saved) : null;
-      });
-      const [members, setMembers] = useState([]);
-      const [firestore, setFirestore] = useState(null);
-      const [showModal, setShowModal] = useState(!config);
-
-      const DEFAULT_MEMBERS = [
-        '이경득','이경률','김주식','이경석','반병주','정성대','이경호',
-        '김금순','이재성','이동관','한석원','강양수','황두호','이성근','이경수','이경철'
-      ].map((n,i)=>({ id:i+1, name:n, attendance:'', count:'', locked:false }));
-
-      useEffect(() => {
-        if (!config) return;
-        try {
-          if (!firebase.apps.length) firebase.initializeApp(config);
-          const auth = firebase.auth();
-          const fs = firebase.firestore();
-          setFirestore(fs);
-          auth.signInAnonymously();
-        } catch (e) { console.error(e); }
-      }, [config]);
-
-      useEffect(() => {
-        if (!firestore) { setMembers(DEFAULT_MEMBERS); return; }
-        const ref = firestore.collection("attendance_2025").doc("autumn");
-        ref.onSnapshot(doc => {
-          if (doc.exists) setMembers(doc.data().members);
-          else ref.set({ members: DEFAULT_MEMBERS });
-        });
-      }, [firestore]);
-
-      const updateMember = (id, field, value) => {
-        const updated = members.map(m => m.id === id ? { ...m, [field]: value } : m);
-        setMembers(updated);
-        if (firestore)
-          firestore.collection("attendance_2025").doc("autumn").update({ members: updated });
-      };
-
-      const total = members.reduce((s,m)=> s + (parseInt(m.count)||0),0);
-      const attending = members.filter(m=>m.attendance==='참석').length;
-      const notAttending = members.filter(m=>m.attendance==='불참').length;
-      const pending = members.filter(m=>!m.attendance).length;
-
-      const [input, setInput] = useState({
-        apiKey:'', authDomain:'', projectId:'', storageBucket:'', messagingSenderId:'', appId:''
-      });
-
-      const saveConfig = () => {
-        localStorage.setItem("firebaseConfig", JSON.stringify(input));
-        setConfig(input);
-        setShowModal(false);
-        location.reload();
-      };
-
-      const resetConfig = () => {
-        localStorage.removeItem("firebaseConfig");
-        setShowModal(true);
-      };
-
-      return (
-        <div className="p-4 max-w-4xl mx-auto">
-          {/* Header */}
-          <div className="bg-white rounded-2xl shadow-lg p-4 flex justify-between items-center mb-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                📅 2025년 추계 계모임
-              </h1>
-              <p className="text-gray-600 text-sm">모임일시 : 2025. 11. 22(토) 12:00</p>
-            </div>
-            <button onClick={resetConfig} className="text-sm bg-gray-200 px-3 py-1 rounded-md hover:bg-gray-300">⚙️ 설정</button>
-          </div>
-
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-2 text-center mb-4 text-sm sm:text-base">
-            <div className="bg-green-100 p-2 rounded-lg font-bold text-green-700">참석 {attending}명</div>
-            <div className="bg-red-100 p-2 rounded-lg font-bold text-red-700">불참 {notAttending}명</div>
-            <div className="bg-gray-100 p-2 rounded-lg font-bold text-gray-700">미응답 {pending}명</div>
-          </div>
-
-          <div className="text-right text-indigo-700 mb-2 font-semibold">👥 총 참석 인원: {total}명</div>
-
-          {/* Table */}
-          <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
-            <table className="w-full text-sm sm:text-base">
-              <thead className="bg-indigo-600 text-white">
-                <tr>
-                  <th className="p-2">번호</th>
-                  <th className="p-2">이름</th>
-                  <th className="p-2">참석</th>
-                  <th className="p-2">인원</th>
-                  <th className="p-2">확인</th>
-                </tr>
-              </thead>
-              <tbody>
-                {members.map((m, i) => (
-                  <tr key={m.id} className="border-b text-center hover:bg-gray-50">
-                    <td>{i+1}</td>
-                    <td>{m.name}</td>
-                    <td>
-                      <select
-                        value={m.attendance}
-                        onChange={e=>updateMember(m.id,'attendance',e.target.value)}
-                        className="border rounded px-2 py-1"
-                      >
-                        <option value="">선택</option>
-                        <option value="참석">참석</option>
-                        <option value="불참">불참</option>
-                      </select>
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        min="1"
-                        value={m.count}
-                        disabled={m.attendance!=='참석'||m.locked}
-                        onChange={e=>updateMember(m.id,'count',e.target.value)}
-                        className="border rounded w-16 text-center"
-                      />
-                    </td>
-                    <td>
-                      {!m.locked ? (
-                        <button onClick={()=>updateMember(m.id,'locked',true)} className="bg-green-500 text-white px-2 py-1 rounded">확인</button>
-                      ):(
-                        <button onClick={()=>updateMember(m.id,'locked',false)} className="bg-yellow-500 text-white px-2 py-1 rounded">수정</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {showModal && (
-            <div className="fixed inset-0 flex items-center justify-center modal-bg">
-              <div className="bg-white rounded-2xl shadow-2xl p-6 w-96">
-                <h2 className="text-xl font-bold mb-4">Firebase 설정 (1회만)</h2>
-                <p className="text-gray-600 text-sm mb-4">Firebase 콘솔 → 웹 앱 추가 → 구성 값을 여기에 붙여넣으세요.</p>
-                {Object.keys(input).map(k=>(
-                  <div key={k} className="mb-2">
-                    <label className="block text-sm font-semibold text-gray-700">{k}</label>
-                    <input className="border rounded w-full p-1" value={input[k]} onChange={e=>setInput({...input,[k]:e.target.value})}/>
-                  </div>
-                ))}
-                <div className="flex justify-end gap-2 mt-4">
-                  <button onClick={()=>setShowModal(false)} className="px-3 py-1 bg-yellow-100 rounded">나중에</button>
-                  <button onClick={saveConfig} className="px-3 py-1 bg-indigo-600 text-white rounded">저장</button>
-                </div>
-              </div>
-            </div>
-          )}
+<body class="min-h-screen p-4 sm:p-6">
+  <div class="max-w-5xl mx-auto">
+    <!-- 헤더 -->
+    <div class="bg-white card rounded-2xl p-5 flex items-start justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-indigo-600 text-2xl">📅</span>
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-800">2025년 추계 계모임</h1>
         </div>
-      );
+        <p class="text-sm text-gray-500 mt-1">모임일시 : <b>2025. 11. 22(토) 12:00</b></p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="realtimeBadge" class="badge bg-gray-100 text-gray-500">오프라인</span>
+        <button id="openSetup" class="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg">설정</button>
+      </div>
+    </div>
+
+    <!-- 통계 -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+      <div class="bg-green-50 text-green-700 border border-green-200 pill p-3 text-center font-semibold">
+        참석 <span id="attendCount">0</span>명 · 총 <span id="totalPeople">0</span>명
+      </div>
+      <div class="bg-rose-50 text-rose-700 border border-rose-200 pill p-3 text-center font-semibold">
+        불참 <span id="absentCount">0</span>명
+      </div>
+      <div class="bg-gray-50 text-gray-700 border border-gray-200 pill p-3 text-center font-semibold">
+        미응답 <span id="pendingCount">16</span>명
+      </div>
+    </div>
+
+    <!-- 표 -->
+    <div class="bg-white card rounded-2xl mt-4 overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-indigo-600 text-white">
+          <tr>
+            <th class="px-4 py-3 text-left w-16">번호</th>
+            <th class="px-4 py-3 text-left">이름</th>
+            <th class="px-4 py-3 text-center w-40">참석</th>
+            <th class="px-4 py-3 text-center w-28">인원</th>
+            <th class="px-4 py-3 text-center w-28">확인</th>
+            <th class="px-4 py-3 text-center w-28">수정</th>
+          </tr>
+        </thead>
+        <tbody id="memberBody"></tbody>
+      </table>
+    </div>
+
+    <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
+      ✅ 카톡 링크로 접속 → <b>참석/불참</b>과 <b>인원</b> 입력 후 <b>확인</b>만 누르면 자동 저장됩니다. (실시간 동기화)
+    </div>
+  </div>
+
+  <!-- Firebase 설정 모달 -->
+  <div id="setupWrap" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl w-full max-w-xl p-5">
+      <h2 class="text-xl font-bold mb-2">Firebase 설정 (1회만)</h2>
+      <p class="text-sm text-gray-500 mb-4">Firebase 콘솔 → 웹 앱 추가 → 구성 값을 아래에 붙여넣으세요.</p>
+      <div class="grid grid-cols-1 gap-3">
+        <div><label class="text-xs text-gray-500">apiKey</label><input id="apiKey" class="w-full border rounded-lg p-2" /></div>
+        <div><label class="text-xs text-gray-500">authDomain</label><input id="authDomain" class="w-full border rounded-lg p-2" /></div>
+        <div><label class="text-xs text-gray-500">projectId</label><input id="projectId" class="w-full border rounded-lg p-2" /></div>
+        <div><label class="text-xs text-gray-500">storageBucket</label><input id="storageBucket" class="w-full border rounded-lg p-2" /></div>
+        <div><label class="text-xs text-gray-500">messagingSenderId</label><input id="messagingSenderId" class="w-full border rounded-lg p-2" /></div>
+        <div><label class="text-xs text-gray-500">appId</label><input id="appId" class="w-full border rounded-lg p-2" /></div>
+      </div>
+      <div class="flex justify-end gap-2 mt-4">
+        <button id="laterBtn" class="px-3 py-2 rounded-lg bg-gray-100">나중에</button>
+        <button id="saveConfig" class="px-3 py-2 rounded-lg bg-indigo-600 text-white">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Firebase + 앱 로직 -->
+  <script type="module">
+    // 16명 이름(요청대로 수정 반영)
+    const initialMembers = [
+      { id: 1, name: '이경득' }, { id: 2, name: '이경률' }, { id: 3, name: '김주식' }, { id: 4, name: '이경석' },
+      { id: 5, name: '반병주' }, { id: 6, name: '정성대' }, { id: 7, name: '이경호' }, { id: 8, name: '김금순' },
+      { id: 9, name: '이재성' }, { id: 10, name: '이동관' }, { id: 11, name: '한석원' }, { id: 12, name: '강양수' },
+      { id: 13, name: '황두호' }, { id: 14, name: '이성근' }, { id: 15, name: '이경수' }, { id: 16, name: '이경철' }
+    ];
+    const LS_KEY = 'fbConfigMeeting2025';
+    const COL_NAME = 'meeting-data-2025';
+
+    const realtimeBadge = document.getElementById('realtimeBadge');
+    const memberBody = document.getElementById('memberBody');
+    const attendCountEl = document.getElementById('attendCount');
+    const absentCountEl = document.getElementById('absentCount');
+    const pendingCountEl = document.getElementById('pendingCount');
+    const totalPeopleEl = document.getElementById('totalPeople');
+
+    const setupWrap = document.getElementById('setupWrap');
+    const openSetup = document.getElementById('openSetup');
+    const saveConfigBtn = document.getElementById('saveConfig');
+    const laterBtn = document.getElementById('laterBtn');
+
+    // 행 렌더
+    const rows = {};
+    function renderRows(dataMap = {}) {
+      memberBody.innerHTML = '';
+      let attending = 0, absent = 0, pending = 0, totalPax = 0;
+      initialMembers.forEach((m, idx) => {
+        const d = dataMap[m.id] || {};
+        const tr = document.createElement('tr');
+        tr.className = 'border-b hover:bg-gray-50';
+        tr.innerHTML = `
+          <td class="px-4 py-3">${idx+1}</td>
+          <td class="px-4 py-3 font-medium">${m.name}</td>
+          <td class="px-4 py-3 text-center">
+            <select class="border rounded-lg px-2 py-1">
+              <option value="">선택</option>
+              <option value="참석" ${d.attendance==='참석'?'selected':''}>참석</option>
+              <option value="불참" ${d.attendance==='불참'?'selected':''}>불참</option>
+            </select>
+          </td>
+          <td class="px-4 py-3 text-center">
+            <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center" ${d.attendance==='참석'?'':'disabled'} value="${d.count??''}" />
+          </td>
+          <td class="px-4 py-3 text-center">
+            <button class="saveBtn bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg">확인</button>
+          </td>
+          <td class="px-4 py-3 text-center">
+            <button class="editBtn bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded-lg">수정</button>
+          </td>
+        `;
+        const sel = tr.querySelector('select');
+        const input = tr.querySelector('input');
+        sel.addEventListener('change', () => {
+          if (sel.value === '참석') { input.disabled = false; if(!input.value) input.value = 1; }
+          else { input.disabled = true; input.value = ''; }
+        });
+        tr.querySelector('.editBtn').addEventListener('click', () => {
+          sel.disabled = false; input.disabled = (sel.value!=='참석');
+        });
+        rows[m.id] = { tr, sel, input };
+        memberBody.appendChild(tr);
+
+        if (!d.attendance) pending++;
+        else if (d.attendance==='참석') { attending++; totalPax += Number(d.count||0); }
+        else if (d.attendance==='불참') { absent++; }
+      });
+      attendCountEl.textContent = attending;
+      absentCountEl.textContent = absent;
+      pendingCountEl.textContent = pending;
+      totalPeopleEl.textContent = totalPax;
     }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
+    // Firebase 초기화 & 실시간
+    let app, db;
+    async function tryInitFirebase() {
+      const saved = localStorage.getItem(LS_KEY);
+      if (!saved) { setupWrap.classList.remove('hidden'); return; }
+      const cfg = JSON.parse(saved);
+      try {
+        const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js');
+        const { getFirestore, doc, setDoc, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+        app = initializeApp(cfg);
+        db = getFirestore(app);
+        realtimeBadge.textContent = '실시간 저장';
+        realtimeBadge.className = 'badge bg-indigo-50 text-indigo-600 border border-indigo-200';
 
+        const map = {};
+        // 각 회원 문서에 대한 실시간 구독
+        initialMembers.forEach(m => {
+          const ref = doc(db, COL_NAME, String(m.id));
+          onSnapshot(ref, (snap) => {
+            map[m.id] = snap.exists()? snap.data(): {};
+            renderRows(map);
+          });
+        });
+
+        // 저장(없으면 자동 생성)
+        memberBody.addEventListener('click', async (e) => {
+          const btn = e.target.closest('.saveBtn');
+          if (!btn) return;
+          const tr = btn.closest('tr');
+          const idx = [...memberBody.children].indexOf(tr);
+          const member = initialMembers[idx];
+          const sel = rows[member.id].sel;
+          const input = rows[member.id].input;
+          const attendance = sel.value;
+          const count = attendance==='참석' ? Number(input.value||0) : 0;
+          const payload = { name: member.name, attendance, count, updatedAt: new Date().toISOString() };
+          await setDoc(doc(db, COL_NAME, String(member.id)), payload, { merge: true }); // 컬렉션/문서 자동 생성
+          sel.disabled = true; input.disabled = true;
+        });
+      } catch (err) {
+        console.error(err);
+        alert('Firebase 초기화 실패. 설정 값을 다시 확인해주세요.');
+        setupWrap.classList.remove('hidden');
+      }
+    }
+
+    // 설정 모달
+    openSetup.addEventListener('click', () => {
+      const saved = localStorage.getItem(LS_KEY);
+      if (saved) {
+        try {
+          const cfg = JSON.parse(saved);
+          ['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'].forEach(k=>{
+            document.getElementById(k).value = cfg[k]||'';
+          });
+        } catch {}
+      }
+      setupWrap.classList.remove('hidden');
+    });
+    laterBtn.addEventListener('click', ()=> setupWrap.classList.add('hidden'));
+    saveConfigBtn.addEventListener('click', ()=> {
+      const cfg = {
+        apiKey: document.getElementById('apiKey').value.trim(),
+        authDomain: document.getElementById('authDomain').value.trim(),
+        projectId: document.getElementById('projectId').value.trim(),
+        storageBucket: document.getElementById('storageBucket').value.trim(),
+        messagingSenderId: document.getElementById('messagingSenderId').value.trim(),
+        appId: document.getElementById('appId').value.trim(),
+      };
+      if (!cfg.apiKey || !cfg.projectId || !cfg.appId) {
+        alert('apiKey / projectId / appId 는 필수입니다.');
+        return;
+      }
+      localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+      setupWrap.classList.add('hidden');
+      tryInitFirebase();
+    });
+
+    // 초기 렌더 & 시도
+    renderRows({});
+    tryInitFirebase();
   </script>
 </body>
 </html>
