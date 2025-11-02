@@ -61,7 +61,8 @@
     </div>
 
     <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
-      ✅ 규칙: <b>하루 1번만 제출 가능</b>, 다음 날부터 <b>마감일(2025-11-07)</b> 전까지는 수정 가능, <b>마감일 이후 수정/제출 불가</b>
+      ✅ 규칙: <b>하루 1번만 제출 가능</b>, 다음 날부터 <b>마감일(2025-11-07)</b> 전까지는 수정 가능, <b>마감일 이후 수정/제출 불가</b><br>
+      🔄 현재 화면은 <b>모두 “선택/공백”으로 초기 표시</b>하도록 설정되어 있습니다.
     </div>
   </div>
 
@@ -70,11 +71,14 @@
     // ----------------------------
     // 0) 환경설정
     // ----------------------------
-    const DEADLINE = '2025-11-07'; // YYYY-MM-DD (Asia/Seoul 기준)
+    const DEADLINE = '2025-11-07';             // YYYY-MM-DD (Asia/Seoul 기준)
+    const FORCE_BLANK_DISPLAY = true;          // ← 화면을 항상 "선택/공백"으로 표시 (통계도 미응답 처리)
 
     function getSeoulDate() {
       const now = new Date();
-      const fmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' });
+      const fmt = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit'
+      });
       return fmt.format(now); // "YYYY-MM-DD"
     }
     const today = getSeoulDate();
@@ -135,13 +139,17 @@
 
     function renderRows(dataMap = {}) {
       memberBody.innerHTML = '';
-      let attending = 0, absent = 0, pending = 0, totalPax = 0;
+
+      // 통계 계산: 강제 초기 표시 모드면 전원 미응답 처리
+      let attending = 0, absent = 0, pending = initialMembers.length, totalPax = 0;
 
       initialMembers.forEach((m, idx) => {
         const d = dataMap[m.id] || {};
-        const last = d.lastSubmitted || null;            // YYYY-MM-DD
+        const last = d.lastSubmitted || null;             // YYYY-MM-DD
         const submittedToday = last === today;
-        const lockedToday = submittedToday || pastDeadline; // 오늘 이미 제출 or 마감 경과 → 잠금
+
+        // 오늘 이미 제출했으면(또는 마감 경과) 잠금. 단, 강제 초기표시라도 규칙은 지킴
+        const lockedToday = submittedToday || pastDeadline;
 
         const tr = document.createElement('tr');
         tr.className = 'border-b hover:bg-gray-50';
@@ -151,14 +159,13 @@
           <td class="px-4 py-3 text-center">
             <select class="border rounded-lg px-2 py-1" ${lockedToday ? 'disabled' : ''}>
               <option value="">선택</option>
-              <option value="참석" ${d.attendance==='참석'?'selected':''}>참석</option>
-              <option value="불참" ${d.attendance==='불참'?'selected':''}>불참</option>
+              <option value="참석">참석</option>
+              <option value="불참">불참</option>
             </select>
           </td>
           <td class="px-4 py-3 text-center">
             <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center"
-              ${ (lockedToday || d.attendance!=='참석') ? 'disabled' : '' }
-              value="${d.attendance==='참석' ? (d.count ?? '') : ''}" />
+              ${lockedToday ? 'disabled' : 'disabled'} value="" />
           </td>
           <td class="px-4 py-3 text-center">
             <button class="saveBtn px-3 py-1 rounded-lg ${lockedToday ? 'btn-gray' : 'btn-green'}"
@@ -168,11 +175,9 @@
 
         const sel = tr.querySelector('select');
         const input = tr.querySelector('input');
-        const saveBtn = tr.querySelector('saveBtn');
+        const saveBtn = tr.querySelector('.saveBtn');
 
-        const saveButton = tr.querySelector('.saveBtn');
-
-        // 참석 선택에 따른 인원 입력 가능 여부
+        // 참석 선택 시에만 인원 입력 가능
         sel?.addEventListener('change', () => {
           if (sel.value === '참석' && !lockedToday) {
             input.disabled = false;
@@ -183,13 +188,8 @@
           }
         });
 
-        rows[m.id] = { tr, sel, input, saveBtn: saveButton, meta: { last } };
+        rows[m.id] = { tr, sel, input, saveBtn, meta: { last } };
         memberBody.appendChild(tr);
-
-        // 집계
-        if (!d.attendance) pending++;
-        else if (d.attendance === '참석') { attending++; totalPax += Number(d.count || 0); }
-        else if (d.attendance === '불참') { absent++; }
       });
 
       attendCountEl.textContent = attending;
@@ -206,6 +206,7 @@
       const ref = doc(db, COL_NAME, String(m.id));
       onSnapshot(ref, (snap) => {
         map[m.id] = snap.exists() ? snap.data() : {};
+        // 강제 초기 표시를 켠 상태에서는 통계/표시는 항상 “선택/공백”
         renderRows(map);
       });
     });
@@ -220,7 +221,7 @@
       const tr = btn.closest('tr');
       const idx = [...memberBody.children].indexOf(tr);
       const member = initialMembers[idx];
-      const { sel, input, saveBtn } = rows[member.id];
+      const { sel, input, saveBtn, meta } = rows[member.id];
 
       // 마감일 이후 전면 금지
       if (pastDeadline) {
@@ -230,7 +231,7 @@
         return;
       }
 
-      // 오늘 이미 제출했는지 서버 상태 확인
+      // 오늘 이미 제출했는지 서버 상태 확인 (일 1회 제한)
       const ref = doc(db, COL_NAME, String(member.id));
       const cur = await getDoc(ref);
       const last = cur.exists() ? (cur.data().lastSubmitted || null) : null;
