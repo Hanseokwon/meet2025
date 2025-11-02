@@ -10,6 +10,9 @@
     .card { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
     .badge { font-size:.8rem; padding:.2rem .5rem; border-radius:.5rem; }
     .pill { border-radius: 1rem; }
+    .btn-green { background:#059669; color:white; }
+    .btn-green:hover { background:#047857; }
+    .btn-gray { background:#d1d5db; color:#4b5563; cursor:not-allowed; }
   </style>
 </head>
 <body class="min-h-screen p-4 sm:p-6">
@@ -41,7 +44,7 @@
       </div>
     </div>
 
-    <!-- 표 (수정 버튼 제거) -->
+    <!-- 표 -->
     <div class="bg-white card rounded-2xl mt-4 overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-indigo-600 text-white">
@@ -58,13 +61,28 @@
     </div>
 
     <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
-      ✅ 카톡 링크 열고 <b>참석/불참</b> 선택 → <b>인원</b> 입력 → <b>확인</b> 누르면 저장되며, <b>한 번 저장하면 잠금</b>됩니다.
+      ✅ 규칙: <b>하루 1번만 제출 가능</b>, 다음 날부터 <b>마감일(2025-11-07)</b> 전까지는 수정 가능, <b>마감일 이후 수정/제출 불가</b>
     </div>
   </div>
 
   <!-- Firebase + 앱 로직 -->
   <script type="module">
-    // Firebase 설정(고정)
+    // ----------------------------
+    // 0) 환경설정
+    // ----------------------------
+    const DEADLINE = '2025-11-07'; // YYYY-MM-DD (Asia/Seoul 기준)
+
+    function getSeoulDate() {
+      const now = new Date();
+      const fmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' });
+      return fmt.format(now); // "YYYY-MM-DD"
+    }
+    const today = getSeoulDate();
+    const pastDeadline = today > DEADLINE;
+
+    // ----------------------------
+    // 1) Firebase 설정(고정)
+    // ----------------------------
     const firebaseConfig = {
       apiKey: "AIzaSyDQhi3QSFY-vE2x75ehBntmjG1BrYIVIH0",
       authDomain: "meet2025-2f126.firebaseapp.com",
@@ -74,7 +92,9 @@
       appId: "1:908909912507:web:de10a11c099c9754c6385e"
     };
 
-    // 명단(이름 수정 반영)
+    // ----------------------------
+    // 2) 명단
+    // ----------------------------
     const initialMembers = [
       { id: 1, name: '이경득' }, { id: 2, name: '이경률' }, { id: 3, name: '김주식' }, { id: 4, name: '이경석' },
       { id: 5, name: '반병주' }, { id: 6, name: '정성대' }, { id: 7, name: '이경호' }, { id: 8, name: '김금순' },
@@ -89,21 +109,39 @@
     const pendingCountEl = document.getElementById('pendingCount');
     const totalPeopleEl = document.getElementById('totalPeople');
 
-    // Firebase 초기화
+    // ----------------------------
+    // 3) Firebase 초기화
+    // ----------------------------
     const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js');
     const { getFirestore, doc, setDoc, onSnapshot, getDoc } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 렌더
+    // ----------------------------
+    // 4) 렌더링
+    // ----------------------------
     const rows = {};
+    function setBtnState(btn, enabled) {
+      if (enabled) {
+        btn.disabled = false;
+        btn.classList.remove('btn-gray');
+        btn.classList.add('btn-green');
+      } else {
+        btn.disabled = true;
+        btn.classList.remove('btn-green');
+        btn.classList.add('btn-gray');
+      }
+    }
+
     function renderRows(dataMap = {}) {
       memberBody.innerHTML = '';
       let attending = 0, absent = 0, pending = 0, totalPax = 0;
 
       initialMembers.forEach((m, idx) => {
         const d = dataMap[m.id] || {};
-        const locked = !!d.locked;
+        const last = d.lastSubmitted || null;            // YYYY-MM-DD
+        const submittedToday = last === today;
+        const lockedToday = submittedToday || pastDeadline; // 오늘 이미 제출 or 마감 경과 → 잠금
 
         const tr = document.createElement('tr');
         tr.className = 'border-b hover:bg-gray-50';
@@ -111,7 +149,7 @@
           <td class="px-4 py-3">${idx+1}</td>
           <td class="px-4 py-3 font-medium">${m.name}</td>
           <td class="px-4 py-3 text-center">
-            <select class="border rounded-lg px-2 py-1" ${locked?'disabled':''}>
+            <select class="border rounded-lg px-2 py-1" ${lockedToday ? 'disabled' : ''}>
               <option value="">선택</option>
               <option value="참석" ${d.attendance==='참석'?'selected':''}>참석</option>
               <option value="불참" ${d.attendance==='불참'?'selected':''}>불참</option>
@@ -119,24 +157,33 @@
           </td>
           <td class="px-4 py-3 text-center">
             <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center"
-              ${ (locked || d.attendance!=='참석') ? 'disabled' : '' }
-              value="${d.count ?? ''}" />
+              ${ (lockedToday || d.attendance!=='참석') ? 'disabled' : '' }
+              value="${d.attendance==='참석' ? (d.count ?? '') : ''}" />
           </td>
           <td class="px-4 py-3 text-center">
-            <button class="saveBtn ${locked ? 'bg-gray-300 text-gray-600 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white'} px-3 py-1 rounded-lg"
-              ${locked?'disabled':''}>확인</button>
+            <button class="saveBtn px-3 py-1 rounded-lg ${lockedToday ? 'btn-gray' : 'btn-green'}"
+              ${lockedToday ? 'disabled' : ''}>확인</button>
           </td>
         `;
+
         const sel = tr.querySelector('select');
         const input = tr.querySelector('input');
-        const saveBtn = tr.querySelector('.saveBtn');
+        const saveBtn = tr.querySelector('saveBtn');
 
+        const saveButton = tr.querySelector('.saveBtn');
+
+        // 참석 선택에 따른 인원 입력 가능 여부
         sel?.addEventListener('change', () => {
-          if (sel.value === '참석') { input.disabled = false; if (!input.value) input.value = 1; }
-          else { input.disabled = true; input.value = ''; }
+          if (sel.value === '참석' && !lockedToday) {
+            input.disabled = false;
+            if (!input.value) input.value = '';
+          } else {
+            input.value = '';
+            input.disabled = true;
+          }
         });
 
-        rows[m.id] = { tr, sel, input, saveBtn };
+        rows[m.id] = { tr, sel, input, saveBtn: saveButton, meta: { last } };
         memberBody.appendChild(tr);
 
         // 집계
@@ -151,7 +198,9 @@
       totalPeopleEl.textContent = totalPax;
     }
 
-    // 실시간 구독
+    // ----------------------------
+    // 5) 실시간 구독
+    // ----------------------------
     const map = {};
     initialMembers.forEach(m => {
       const ref = doc(db, COL_NAME, String(m.id));
@@ -161,7 +210,9 @@
       });
     });
 
-    // 1회 제출만 허용: 확인 클릭 시 잠금
+    // ----------------------------
+    // 6) 제출(일 1회 제한 + 마감일 적용)
+    // ----------------------------
     memberBody.addEventListener('click', async (e) => {
       const btn = e.target.closest('.saveBtn');
       if (!btn) return;
@@ -171,13 +222,22 @@
       const member = initialMembers[idx];
       const { sel, input, saveBtn } = rows[member.id];
 
-      if (saveBtn.disabled) return; // 이미 잠금
+      // 마감일 이후 전면 금지
+      if (pastDeadline) {
+        alert('마감일(2025-11-07) 이후에는 수정/제출할 수 없습니다.');
+        setBtnState(saveBtn, false);
+        sel.disabled = true; input.disabled = true;
+        return;
+      }
 
-      // 서버 상태 확인(동시 클릭 예방)
+      // 오늘 이미 제출했는지 서버 상태 확인
       const ref = doc(db, COL_NAME, String(member.id));
       const cur = await getDoc(ref);
-      if (cur.exists() && cur.data().locked) {
-        alert('이미 제출되었습니다. (1회만 가능)');
+      const last = cur.exists() ? (cur.data().lastSubmitted || null) : null;
+      if (last === today) {
+        alert('하루 1번만 제출할 수 있습니다. (오늘 이미 제출됨)');
+        setBtnState(saveBtn, false);
+        sel.disabled = true; input.disabled = true;
         return;
       }
 
@@ -186,21 +246,20 @@
       if (!attendance) { alert('참석/불참을 선택해주세요.'); return; }
       if (attendance === '참석' && (!count || count < 1)) { alert('인원을 1 이상 입력해주세요.'); return; }
 
+      // 저장(오늘 제출일로 기록)
       const payload = {
         name: member.name,
         attendance,
         count,
-        locked: true, // 🔒 잠금 표시
+        lastSubmitted: today,   // ← 일 1회 제한 근거
         updatedAt: new Date().toISOString()
       };
       await setDoc(ref, payload, { merge: true });
 
-      // 로컬 UI 잠금 + 색상 회색으로
+      // 오늘은 즉시 잠금
       sel.disabled = true;
       input.disabled = true;
-      saveBtn.disabled = true;
-      saveBtn.classList.remove('bg-emerald-600','hover:bg-emerald-700','text-white');
-      saveBtn.classList.add('bg-gray-300','text-gray-600','cursor-not-allowed');
+      setBtnState(saveBtn, false);
     });
 
     // 초기 렌더
