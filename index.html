@@ -63,7 +63,7 @@
     </div>
 
     <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
-      ✅ <b>내가 처음 선택한 1명만</b> 입력 활성화, 다른 사람 칸은 선택/입력 불가(회색)<br>
+      ✅ <b>내가 처음 선택한 1명만</b> 활성화, 다른 사람 칸은 선택/입력 불가(회색)<br>
       ✅ 개인별 하루 1회, 기기/브라우저 당 하루 1명, <b>마감일(2025-11-07)</b> 이후 전면 불가<br>
       📊 통계는 실시간(DB 값 기준)으로 반영됩니다.
     </div>
@@ -73,7 +73,7 @@
   <script type="module">
     /* ===== 날짜/환경 ===== */
     const DEADLINE = '2025-11-07';
-    const ONE_SUBMIT_LS = 'meet2025_chosen_member'; // { date, memberId }
+    const CHOSEN_LS = 'meet2025_chosen_member'; // { date, memberId }
     const today = new Intl.DateTimeFormat('sv-SE', {
       timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'
     }).format(new Date());
@@ -81,7 +81,7 @@
 
     function getChosenLocal(){
       try{
-        const raw = localStorage.getItem(ONE_SUBMIT_LS);
+        const raw = localStorage.getItem(CHOSEN_LS);
         if(!raw) return null;
         const o = JSON.parse(raw);
         if(o && o.date === today) return o; // 오늘만 유효
@@ -89,9 +89,9 @@
       return null;
     }
     function setChosenLocal(memberId){
-      localStorage.setItem(ONE_SUBMIT_LS, JSON.stringify({date: today, memberId}));
+      localStorage.setItem(CHOSEN_LS, JSON.stringify({date: today, memberId}));
     }
-    function clearChosenLocal(){ localStorage.removeItem(ONE_SUBMIT_LS); }
+    function clearChosenLocal(){ localStorage.removeItem(CHOSEN_LS); }
 
     /* ===== Firebase ===== */
     const firebaseConfig = {
@@ -119,13 +119,14 @@
 
     /* ===== 상태 ===== */
     const dbMap = {};     // Firestore 저장값
+    const uiOverride = {}; // 임시 입력값 { [id]: { attendance?: string, count?: string } }
     const rows  = {};     // 요소 캐시
 
-    const memberBody   = document.getElementById('memberBody');
-    const attendCountEl= document.getElementById('attendCount');
-    const absentCountEl= document.getElementById('absentCount');
-    const pendingCountEl= document.getElementById('pendingCount');
-    const totalPeopleEl= document.getElementById('totalPeople');
+    const memberBody     = document.getElementById('memberBody');
+    const attendCountEl  = document.getElementById('attendCount');
+    const absentCountEl  = document.getElementById('absentCount');
+    const pendingCountEl = document.getElementById('pendingCount');
+    const totalPeopleEl  = document.getElementById('totalPeople');
 
     function setBtnState(btn, enabled){
       btn.disabled = !enabled;
@@ -162,9 +163,16 @@
         const lockedByLocal = chosen && chosen.memberId !== m.id;
         const rowLocked = lockedByDB || lockedByLocal;
 
-        // 잠긴 행은 저장된 값 그대로 보여주고, 비활성
-        const displayAttendance = rowLocked && d.attendance ? d.attendance : '';
-        const displayCount      = rowLocked && d.attendance === '참석' ? (d.count ?? '') : '';
+        const temp = uiOverride[m.id] || {};
+
+        // 잠기지 않은 행은 임시값 우선 표시, 잠긴 행은 DB 값 표시
+        const displayAttendance = rowLocked
+          ? (d.attendance || '')
+          : (temp.attendance ?? '');
+
+        const displayCount = rowLocked
+          ? (d.attendance === '참석' ? (d.count ?? '') : '')
+          : ((temp.attendance ?? '') === '참석' ? (temp.count ?? '') : '');
 
         const tr = document.createElement('tr');
         tr.className = 'border-b hover:bg-gray-50';
@@ -192,11 +200,12 @@
         const input = tr.querySelector('input');
         const saveBtn = tr.querySelector('.saveBtn');
 
-        // ✅ 내가 처음으로 이 행에서 선택(참석/불참 중 하나)하면, 그 순간 "내 이름"으로 확정 → 다른 행 전부 비활성
+        // ✅ 내가 처음으로 이 행에서 선택(참석/불참 중 하나)하면, 그 순간 "내 이름" 확정 → 다른 행 전부 비활성
         if(!chosen){
           sel.addEventListener('change', ()=>{
             if(sel.value){ // 빈값 아님
               setChosenLocal(m.id);
+              uiOverride[m.id] = { attendance: sel.value, count: input.value || '' };
               renderRows(); // 즉시 재렌더 → 다른 행 전부 비활성
             }
           });
@@ -209,22 +218,36 @@
         }
 
         if(!rowLocked){
-          // 이 행은 오늘 내가 선택한 "내 이름" → 자유롭게 입력/확인 가능
+          // 임시상태 유지
+          sel.addEventListener('change', ()=>{
+            uiOverride[m.id] = uiOverride[m.id] || {};
+            uiOverride[m.id].attendance = sel.value;
+            if(sel.value !== '참석'){ uiOverride[m.id].count = ''; input.value=''; }
+          });
+          input.addEventListener('input', ()=>{
+            uiOverride[m.id] = uiOverride[m.id] || {};
+            if((uiOverride[m.id].attendance || sel.value) === '참석'){
+              uiOverride[m.id].count = input.value;
+            }
+          });
+
+          // 저장(확인)
           saveBtn.addEventListener('click', async ()=>{
             if(pastDeadline){ alert('마감일(2025-11-07) 이후에는 제출할 수 없습니다.'); return; }
 
-            // 개인별 하루 1회 (서버 측 확인)
+            // 개인별 하루 1회 (서버 측 검증)
             const ref = doc(db, COL, String(m.id));
             const cur = await getDoc(ref);
-            const last= cur.exists()? (cur.data().lastSubmitted||null) : null;
+            const last = cur.exists()? (cur.data().lastSubmitted||null) : null;
             if(last === today){
               alert('이 이름으로는 오늘 이미 제출하셨습니다.');
               sel.disabled = true; input.disabled = true; setBtnState(saveBtn,false);
               return;
             }
 
-            const attendance = sel.value;
-            const countVal   = attendance==='참석' ? Number(input.value||0) : 0;
+            const attendance = (uiOverride[m.id]?.attendance || sel.value || '');
+            const countVal   = attendance === '참석' ? Number(uiOverride[m.id]?.count || input.value || 0) : 0;
+
             if(!attendance){ alert('참석/불참을 선택해주세요.'); return; }
             if(attendance==='참석' && (!countVal || countVal < 1)){ alert('인원을 1 이상 입력해주세요.'); return; }
 
@@ -242,6 +265,9 @@
             sel.disabled = true;
             input.disabled = true;
             setBtnState(saveBtn, false);
+
+            // 임시상태 제거
+            delete uiOverride[m.id];
           });
         }
 
