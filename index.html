@@ -7,7 +7,7 @@
   <title>2026년 춘계 계모임 참석 인원 파악(긴급)</title>
   <meta property="og:title" content="2026년 춘계 계모임 참석 인원 파악(긴급)" />
   <meta property="og:description" content="여기를 눌러 링크를 확인하고 참석 여부를 입력해 주세요." />
-
+  <meta property="og:type" content="website" />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background: linear-gradient(135deg,#eef2ff,#e0e7ff); }
@@ -71,7 +71,7 @@
   </div>
 
   <script type="module">
-    /* ===== 설정값 (2026년 기준) ===== */
+    /* ===== 설정값 ===== */
     const DEADLINE = '2026-05-15'; 
     const CHOSEN_LS = 'meet2026_chosen_member'; 
     const COL = 'meeting-data-2026'; 
@@ -95,7 +95,7 @@
     }
     function clearChosenLocal(){ localStorage.removeItem(CHOSEN_LS); }
 
-    /* ===== Firebase (기존 설정 유지) ===== */
+    /* ===== Firebase 설정 ===== */
     const firebaseConfig = {
       apiKey: "AIzaSyDQhi3QSFY-vE2x75ehBntmjG1BrYIVIH0",
       authDomain: "meet2025-2f126.firebaseapp.com",
@@ -110,7 +110,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    /* ===== 명단 ===== */
     const members = [
       { id: 1, name: '이경득' }, { id: 2, name: '이경률' }, { id: 3, name: '김주식' }, { id: 4, name: '이경석' },
       { id: 5, name: '반병주' }, { id: 6, name: '정성대' }, { id: 7, name: '이경호' }, { id: 8, name: '김금순' },
@@ -193,7 +192,6 @@
             if(pastDeadline){ alert('마감일이 지났습니다.'); return; }
             const attendance = sel.value;
             const countVal = attendance === '참석' ? Number(input.value) : 0;
-
             if(!attendance){ alert('참석 여부를 선택해주세요.'); return; }
             if(attendance==='참석' && countVal < 1){ alert('인원을 입력해주세요.'); return; }
 
@@ -201,7 +199,6 @@
               name: m.name, attendance, count: countVal,
               lastSubmitted: today, updatedAt: new Date().toISOString()
             }, { merge: true });
-
             delete uiOverride[m.id];
             alert('입력이 완료되었습니다.');
           });
