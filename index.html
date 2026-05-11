@@ -6,96 +6,89 @@
   
   <title>2026년 춘계 계모임 참석 인원 파악(긴급)</title>
   <meta property="og:title" content="2026년 춘계 계모임 참석 인원 파악(긴급)" />
-  <meta property="og:description" content="여기를 눌러 링크를 확인하고 참석 여부를 입력해 주세요." />
+  <meta property="og:description" content="격조 높은 모임을 위해 소중한 응답을 기다립니다." />
   <meta property="og:type" content="website" />
+
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    body { background: linear-gradient(135deg,#eef2ff,#e0e7ff); }
-    .card { box-shadow: 0 10px 25px rgba(0,0,0,.06); }
-    .badge { font-size:.8rem; padding:.2rem .5rem; border-radius:.5rem; }
-    .pill { border-radius: 1rem; }
-    .btn-green { background:#059669; color:white; }
-    .btn-green:hover { background:#047857; }
-    .btn-gray { background:#d1d5db; color:#4b5563; cursor:not-allowed; }
-    .btn-outline { border:1px solid #c7d2fe; color:#4f46e5; background:#eef2ff; }
+    @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;800&display=swap');
+    
+    body { 
+      font-family: 'Pretendard', sans-serif;
+      background: #f1f5f9; 
+    }
+    .main-card { 
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.1);
+      background: white;
+    }
+    .header-gradient {
+      background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
+    }
+    .stat-box {
+      border-radius: 1.25rem;
+      transition: all 0.2s ease;
+    }
+    .save-btn {
+      transition: transform 0.1s ease, background-color 0.2s ease;
+    }
+    .save-btn:active { transform: scale(0.96); }
   </style>
 </head>
-<body class="min-h-screen p-4 sm:p-6">
-  <div class="max-w-5xl mx-auto">
-    <div class="bg-white card rounded-2xl p-5 flex items-start justify-between gap-3">
-      <div>
-        <div class="flex items-center gap-2">
-          <span class="text-indigo-600 text-2xl">📅</span>
-          <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-800">2026년 춘계 계모임</h1>
+<body class="min-h-screen p-4 sm:p-10">
+  <div class="max-w-4xl mx-auto">
+    <div class="main-card rounded-[2.5rem] overflow-hidden mb-8">
+      <div class="header-gradient p-8 text-white text-center sm:text-left">
+        <div class="flex flex-col sm:flex-row justify-between items-center gap-6">
+          <div>
+            <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight">2026 춘계 계모임</h1>
+            <p class="text-blue-100 mt-3 flex items-center justify-center sm:justify-start gap-2 text-lg">
+              📅 <b>2026. 05. 30(토) 12:00</b>
+            </p>
+          </div>
+          <button id="resetAll" class="px-4 py-2 bg-white/10 border border-white/20 rounded-full text-xs hover:bg-white/20 transition-all">관리자 메뉴</button>
         </div>
-        <p class="text-sm text-gray-500 mt-1">모임일시 : <b>2026. 05. 30(토) 12:00</b></p>
       </div>
-      <div class="flex items-center gap-2">
-        <span class="badge bg-indigo-50 text-indigo-600 border border-indigo-200">실시간 저장</span>
-        <button id="resetAll" class="px-3 py-1 rounded-lg btn-outline">관리자 초기화</button>
+
+      <div class="grid grid-cols-3 gap-4 p-8 bg-white border-b border-slate-100">
+        <div class="stat-box bg-blue-50 p-5 text-center">
+          <p class="text-[11px] font-bold text-blue-500 uppercase mb-2">참석 명수</p>
+          <p class="text-2xl font-black text-blue-900"><span id="attendCount">0</span>명 <span class="text-slate-300 text-sm">/</span> <span id="totalPeople" class="text-slate-400 font-normal">0</span></p>
+        </div>
+        <div class="stat-box bg-rose-50 p-5 text-center">
+          <p class="text-[11px] font-bold text-rose-500 uppercase mb-2">불참 인원</p>
+          <p id="absentCount" class="text-2xl font-black text-rose-900">0</p>
+        </div>
+        <div class="stat-box bg-slate-50 p-5 text-center">
+          <p class="text-[11px] font-bold text-slate-500 uppercase mb-2">미응답</p>
+          <p id="pendingCount" class="text-2xl font-black text-slate-900">0</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <tbody id="memberBody" class="divide-y divide-slate-100">
+            </tbody>
+        </table>
       </div>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
-      <div class="bg-green-50 text-green-700 border border-green-200 pill p-3 text-center font-semibold">
-        참석 <span id="attendCount">0</span>명 · 총 <span id="totalPeople">0</span>명
-      </div>
-      <div class="bg-rose-50 text-rose-700 border border-rose-200 pill p-3 text-center font-semibold">
-        불참 <span id="absentCount">0</span>명
-      </div>
-      <div class="bg-gray-50 text-gray-700 border border-gray-200 pill p-3 text-center font-semibold">
-        미응답 <span id="pendingCount">0</span>명
-      </div>
-    </div>
-
-    <div class="bg-white card rounded-2xl mt-4 overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-indigo-600 text-white">
-          <tr>
-            <th class="px-4 py-3 w-16">번호</th>
-            <th class="px-4 py-3">이름</th>
-            <th class="px-4 py-3 text-center w-40">참석</th>
-            <th class="px-4 py-3 text-center w-28">인원</th>
-            <th class="px-4 py-3 text-center w-28">확인</th>
-          </tr>
-        </thead>
-        <tbody id="memberBody"></tbody>
-      </table>
-    </div>
-
-    <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
-      ✅ <b>내가 처음 선택한 1명만</b> 활성화, 다른 사람 칸은 선택/입력 불가(회색)<br>
-      ✅ 개인별 하루 1회, 기기/브라우저 당 하루 1명, <b>마감일(2026-05-15)</b> 이후 전면 불가<br>
-      📊 통계는 실시간(DB 값 기준)으로 반영됩니다.
+    <div class="bg-slate-800 text-slate-300 p-8 rounded-[2rem] text-sm leading-relaxed shadow-xl">
+      <p class="flex items-center gap-2 mb-2 text-white font-bold"><span class="text-yellow-400">●</span> 필독 안내사항</p>
+      <p>• 원활한 예약을 위해 <b>5월 15일까지</b> 응답해 주시기 바랍니다.</p>
+      <p>• 참석 시 동반 인원을 포함한 총 인원을 숫자로 입력해 주세요.</p>
+      <p class="mt-4 text-xs text-slate-500">※ 본 시스템은 개인별 실시간 데이터베이스와 동기화됩니다.</p>
     </div>
   </div>
 
   <script type="module">
-    /* ===== 설정값 ===== */
     const DEADLINE = '2026-05-15'; 
-    const CHOSEN_LS = 'meet2026_chosen_member'; 
+    const CHOSEN_LS = 'meet2026_premium_key'; 
     const COL = 'meeting-data-2026'; 
 
     const today = new Intl.DateTimeFormat('sv-SE', {
       timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'
     }).format(new Date());
-    const pastDeadline = today > DEADLINE;
 
-    function getChosenLocal(){
-      try{
-        const raw = localStorage.getItem(CHOSEN_LS);
-        if(!raw) return null;
-        const o = JSON.parse(raw);
-        if(o && o.date === today) return o; 
-      }catch(e){}
-      return null;
-    }
-    function setChosenLocal(memberId){
-      localStorage.setItem(CHOSEN_LS, JSON.stringify({date: today, memberId}));
-    }
-    function clearChosenLocal(){ localStorage.removeItem(CHOSEN_LS); }
-
-    /* ===== Firebase 설정 ===== */
     const firebaseConfig = {
       apiKey: "AIzaSyDQhi3QSFY-vE2x75ehBntmjG1BrYIVIH0",
       authDomain: "meet2025-2f126.firebaseapp.com",
@@ -104,9 +97,9 @@
       messagingSenderId: "908909912507",
       appId: "1:908909912507:web:de10a11c099c9754c6385e"
     };
+
     const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js');
-    const { getFirestore, doc, setDoc, onSnapshot, getDoc, writeBatch } =
-      await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
+    const { getFirestore, doc, setDoc, onSnapshot, writeBatch } = await import('https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js');
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
@@ -117,110 +110,86 @@
       { id: 13, name: '황두호' }, { id: 14, name: '이성근' }, { id: 15, name: '이경수' }, { id: 16, name: '이경철' }
     ];
 
-    const dbMap = {};     
-    const uiOverride = {}; 
+    const dbMap = {};
     const memberBody = document.getElementById('memberBody');
-
-    function recomputeStats(){
-      let a=0,b=0,p=0,t=0;
-      members.forEach(m=>{
-        const d = dbMap[m.id] || {};
-        const att = d.attendance || '';
-        if(!att) p++;
-        else if(att==='참석'){ a++; t += Number(d.count||0); }
-        else if(att==='불참'){ b++; }
-      });
-      document.getElementById('attendCount').textContent = a;
-      document.getElementById('absentCount').textContent = b;
-      document.getElementById('pendingCount').textContent = p;
-      document.getElementById('totalPeople').textContent = t;
-    }
 
     function renderRows(){
       memberBody.innerHTML = '';
-      const chosen = getChosenLocal(); 
+      const chosen = localStorage.getItem(CHOSEN_LS);
 
       members.forEach((m, idx)=>{
         const d = dbMap[m.id] || {};
-        const submittedToday = (d.lastSubmitted === today);
-        const rowLocked = submittedToday || pastDeadline || (chosen && chosen.memberId !== m.id);
-
-        const temp = uiOverride[m.id] || {};
-        const displayAttendance = rowLocked ? (d.attendance || '') : (temp.attendance ?? '');
-        const displayCount = rowLocked
-          ? (d.attendance === '참석' ? (d.count ?? '') : '')
-          : ((temp.attendance ?? '') === '참석' ? (temp.count ?? '') : '');
+        const isLocked = d.lastSubmitted || (chosen && Number(chosen) !== m.id) || (today > DEADLINE);
 
         const tr = document.createElement('tr');
-        tr.className = 'border-b hover:bg-gray-50';
+        tr.className = `group ${isLocked ? 'bg-slate-50/50' : 'bg-white hover:bg-blue-50/30'}`;
         tr.innerHTML = `
-          <td class="px-4 py-3">${idx+1}</td>
-          <td class="px-4 py-3 font-medium">${m.name}</td>
-          <td class="px-4 py-3 text-center">
-            <select class="border rounded-lg px-2 py-1" ${rowLocked ? 'disabled' : ''}>
-              <option value="" ${displayAttendance===''?'selected':''}>선택</option>
-              <option value="참석" ${displayAttendance==='참석'?'selected':''}>참석</option>
-              <option value="불참" ${displayAttendance==='불참'?'selected':''}>불참</option>
+          <td class="px-6 py-6 font-bold text-slate-800 text-lg">${m.name}</td>
+          <td class="px-2 py-6">
+            <select class="w-full border-slate-200 rounded-xl px-3 py-3 text-sm focus:ring-2 focus:ring-blue-500" ${isLocked ? 'disabled' : ''}>
+              <option value="">참석 여부</option>
+              <option value="참석" ${d.attendance==='참석'?'selected':''}>참석</option>
+              <option value="불참" ${d.attendance==='불참'?'selected':''}>불참</option>
             </select>
           </td>
-          <td class="px-4 py-3 text-center">
-            <input type="number" min="1" class="w-20 border rounded-lg px-2 py-1 text-center"
-                   value="${displayCount}" ${rowLocked ? 'disabled' : ''}/>
+          <td class="px-2 py-6">
+            <input type="number" min="1" value="${d.count || ''}" placeholder="명" 
+                   class="w-full text-center border-slate-200 rounded-xl px-2 py-3 text-sm" ${isLocked ? 'disabled' : ''} />
           </td>
-          <td class="px-4 py-3 text-center">
-            <button class="saveBtn px-3 py-1 rounded-lg ${rowLocked?'btn-gray':'btn-green'}"
-                    ${rowLocked?'disabled':''}>확인</button>
+          <td class="px-6 py-6 text-right">
+            <button class="save-btn px-6 py-3 rounded-xl font-bold text-sm shadow-lg
+                          ${isLocked ? 'bg-slate-200 text-slate-400' : 'bg-blue-600 text-white shadow-blue-200'}">
+              ${d.lastSubmitted ? '완료' : '확인'}
+            </button>
           </td>
         `;
 
-        const sel = tr.querySelector('select');
-        const input = tr.querySelector('input');
-        const saveBtn = tr.querySelector('.saveBtn');
-
-        if(!chosen && !rowLocked){
-          sel.addEventListener('change', ()=>{
-            if(sel.value){
-              setChosenLocal(m.id);
-              uiOverride[m.id] = { attendance: sel.value, count: input.value || '' };
-              renderRows(); 
-            }
-          });
-        }
-
-        if(!rowLocked){
-          saveBtn.addEventListener('click', async ()=>{
-            if(pastDeadline){ alert('마감일이 지났습니다.'); return; }
-            const attendance = sel.value;
-            const countVal = attendance === '참석' ? Number(input.value) : 0;
-            if(!attendance){ alert('참석 여부를 선택해주세요.'); return; }
-            if(attendance==='참석' && countVal < 1){ alert('인원을 입력해주세요.'); return; }
+        const btn = tr.querySelector('button');
+        if(!isLocked){
+          btn.addEventListener('click', async ()=>{
+            const sel = tr.querySelector('select').value;
+            const cnt = tr.querySelector('input').value;
+            if(!sel) return alert('여부를 선택해 주세요.');
+            if(sel==='참석' && !cnt) return alert('인원을 적어주세요.');
 
             await setDoc(doc(db, COL, String(m.id)), {
-              name: m.name, attendance, count: countVal,
-              lastSubmitted: today, updatedAt: new Date().toISOString()
+              name: m.name, attendance: sel, count: sel==='참석' ? Number(cnt) : 0, lastSubmitted: today
             }, { merge: true });
-            delete uiOverride[m.id];
-            alert('입력이 완료되었습니다.');
+
+            localStorage.setItem(CHOSEN_LS, m.id);
+            alert('정상적으로 등록되었습니다.');
+            location.reload();
           });
         }
         memberBody.appendChild(tr);
       });
-      recomputeStats();
+
+      let a=0, b=0, p=0, total=0;
+      members.forEach(m=>{
+        const d = dbMap[m.id] || {};
+        if(d.attendance==='참석') { a++; total += (d.count || 0); }
+        else if(d.attendance==='불참') b++;
+        else p++;
+      });
+      document.getElementById('attendCount').textContent = a;
+      document.getElementById('totalPeople').textContent = total;
+      document.getElementById('absentCount').textContent = b;
+      document.getElementById('pendingCount').textContent = p;
     }
 
     members.forEach(m=>{
       onSnapshot(doc(db, COL, String(m.id)), snap=>{
-        dbMap[m.id] = snap.exists()? snap.data() : {};
+        dbMap[m.id] = snap.exists() ? snap.data() : {};
         renderRows();
       });
     });
 
     document.getElementById('resetAll').addEventListener('click', async ()=>{
-      if(prompt('비밀번호')!=='1122') return;
+      if(prompt('비밀번호') !== '1122') return;
       const batch = writeBatch(db);
       members.forEach(m=> batch.set(doc(db, COL, String(m.id)), { attendance:null, count:null, lastSubmitted:null }, {merge:true}));
       await batch.commit();
-      clearChosenLocal();
+      localStorage.removeItem(CHOSEN_LS);
       location.reload();
     });
   </script>
