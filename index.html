@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>2025년 추계 계모임 참석 현황</title>
+  <title>2026년 춘계 계모임 참석 현황</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background: linear-gradient(135deg,#eef2ff,#e0e7ff); }
@@ -18,14 +18,13 @@
 </head>
 <body class="min-h-screen p-4 sm:p-6">
   <div class="max-w-5xl mx-auto">
-    <!-- 헤더 -->
     <div class="bg-white card rounded-2xl p-5 flex items-start justify-between gap-3">
       <div>
         <div class="flex items-center gap-2">
           <span class="text-indigo-600 text-2xl">📅</span>
-          <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-800">2025년 추계 계모임</h1>
+          <h1 class="text-2xl sm:text-3xl font-extrabold text-gray-800">2026년 춘계 계모임</h1>
         </div>
-        <p class="text-sm text-gray-500 mt-1">모임일시 : <b>2025. 11. 22(토) 12:00</b></p>
+        <p class="text-sm text-gray-500 mt-1">모임일시 : <b>2026. 05. 30(토) 12:00</b></p>
       </div>
       <div class="flex items-center gap-2">
         <span class="badge bg-indigo-50 text-indigo-600 border border-indigo-200">실시간 저장</span>
@@ -33,7 +32,6 @@
       </div>
     </div>
 
-    <!-- 통계 -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
       <div class="bg-green-50 text-green-700 border border-green-200 pill p-3 text-center font-semibold">
         참석 <span id="attendCount">0</span>명 · 총 <span id="totalPeople">0</span>명
@@ -46,7 +44,6 @@
       </div>
     </div>
 
-    <!-- 표 -->
     <div class="bg-white card rounded-2xl mt-4 overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="bg-indigo-600 text-white">
@@ -64,16 +61,17 @@
 
     <div class="mt-4 bg-yellow-50 border border-yellow-200 p-4 rounded-xl text-sm text-yellow-800">
       ✅ <b>내가 처음 선택한 1명만</b> 활성화, 다른 사람 칸은 선택/입력 불가(회색)<br>
-      ✅ 개인별 하루 1회, 기기/브라우저 당 하루 1명, <b>마감일(2025-11-07)</b> 이후 전면 불가<br>
+      ✅ 개인별 하루 1회, 기기/브라우저 당 하루 1명, <b>마감일(2026-05-15)</b> 이후 전면 불가<br>
       📊 통계는 실시간(DB 값 기준)으로 반영됩니다.
     </div>
   </div>
 
-  <!-- Firebase + 앱 로직 -->
   <script type="module">
-    /* ===== 날짜/환경 ===== */
-    const DEADLINE = '2025-11-07';
-    const CHOSEN_LS = 'meet2025_chosen_member'; // { date, memberId }
+    /* ===== 날짜/환경 설정 수정 ===== */
+    const DEADLINE = '2026-05-15'; // 2026년 모임 마감일
+    const CHOSEN_LS = 'meet2026_chosen_member'; // 로컬스토리지 키 변경
+    const COL = 'meeting-data-2026'; // 파이어베이스 컬렉션 변경
+
     const today = new Intl.DateTimeFormat('sv-SE', {
       timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'
     }).format(new Date());
@@ -84,7 +82,7 @@
         const raw = localStorage.getItem(CHOSEN_LS);
         if(!raw) return null;
         const o = JSON.parse(raw);
-        if(o && o.date === today) return o; // 오늘만 유효
+        if(o && o.date === today) return o; 
       }catch(e){}
       return null;
     }
@@ -115,12 +113,11 @@
       { id: 9, name: '이재성' }, { id: 10, name: '이동관' }, { id: 11, name: '한석원' }, { id: 12, name: '강양수' },
       { id: 13, name: '황두호' }, { id: 14, name: '이성근' }, { id: 15, name: '이경수' }, { id: 16, name: '이경철' }
     ];
-    const COL = 'meeting-data-2025';
 
     /* ===== 상태 ===== */
-    const dbMap = {};     // Firestore 저장값
-    const uiOverride = {}; // 임시 입력값 { [id]: { attendance?: string, count?: string } }
-    const rows  = {};     // 요소 캐시
+    const dbMap = {};     
+    const uiOverride = {}; 
+    const rows  = {};     
 
     const memberBody     = document.getElementById('memberBody');
     const attendCountEl  = document.getElementById('attendCount');
@@ -134,7 +131,6 @@
       btn.classList.toggle('btn-green', enabled);
     }
 
-    /* 통계: DB 값 기준 */
     function recomputeStats(){
       let a=0,b=0,p=0,t=0;
       members.forEach(m=>{
@@ -152,24 +148,17 @@
 
     function renderRows(){
       memberBody.innerHTML = '';
-      const chosen = getChosenLocal(); // 오늘 이 기기에서 선택한 "내 이름" (있으면 그 행만 활성화)
+      const chosen = getChosenLocal(); 
 
       members.forEach((m, idx)=>{
         const d = dbMap[m.id] || {};
         const submittedToday = (d.lastSubmitted === today);
         const lockedByDB = submittedToday || pastDeadline;
-
-        // 내가 오늘 선택한 이름이 있으면, 그 행만 활성화 / 나머지는 전부 잠금
         const lockedByLocal = chosen && chosen.memberId !== m.id;
         const rowLocked = lockedByDB || lockedByLocal;
 
         const temp = uiOverride[m.id] || {};
-
-        // 잠기지 않은 행은 임시값 우선 표시, 잠긴 행은 DB 값 표시
-        const displayAttendance = rowLocked
-          ? (d.attendance || '')
-          : (temp.attendance ?? '');
-
+        const displayAttendance = rowLocked ? (d.attendance || '') : (temp.attendance ?? '');
         const displayCount = rowLocked
           ? (d.attendance === '참석' ? (d.count ?? '') : '')
           : ((temp.attendance ?? '') === '참석' ? (temp.count ?? '') : '');
@@ -200,25 +189,17 @@
         const input = tr.querySelector('input');
         const saveBtn = tr.querySelector('.saveBtn');
 
-        // ✅ 내가 처음으로 이 행에서 선택(참석/불참 중 하나)하면, 그 순간 "내 이름" 확정 → 다른 행 전부 비활성
         if(!chosen){
           sel.addEventListener('change', ()=>{
-            if(sel.value){ // 빈값 아님
+            if(sel.value){
               setChosenLocal(m.id);
               uiOverride[m.id] = { attendance: sel.value, count: input.value || '' };
-              renderRows(); // 즉시 재렌더 → 다른 행 전부 비활성
+              renderRows(); 
             }
-          });
-        } else if (!lockedByDB && lockedByLocal) {
-          // 이미 오늘 다른 이름을 선택해둔 상태에서, 다른 행을 만지려 하면 안내
-          ['click','focus','change','input'].forEach(ev=>{
-            sel.addEventListener(ev, ()=>alert('오늘은 이미 한 이름을 선택하셨습니다. 다른 사람은 선택할 수 없습니다.'));
-            input.addEventListener(ev, ()=>alert('오늘은 이미 한 이름을 선택하셨습니다. 다른 사람은 선택할 수 없습니다.'));
           });
         }
 
         if(!rowLocked){
-          // 임시상태 유지
           sel.addEventListener('change', ()=>{
             uiOverride[m.id] = uiOverride[m.id] || {};
             uiOverride[m.id].attendance = sel.value;
@@ -231,17 +212,14 @@
             }
           });
 
-          // 저장(확인)
           saveBtn.addEventListener('click', async ()=>{
-            if(pastDeadline){ alert('마감일(2025-11-07) 이후에는 제출할 수 없습니다.'); return; }
+            if(pastDeadline){ alert('마감일(' + DEADLINE + ') 이후에는 제출할 수 없습니다.'); return; }
 
-            // 개인별 하루 1회 (서버 측 검증)
             const ref = doc(db, COL, String(m.id));
             const cur = await getDoc(ref);
             const last = cur.exists()? (cur.data().lastSubmitted||null) : null;
             if(last === today){
               alert('이 이름으로는 오늘 이미 제출하셨습니다.');
-              sel.disabled = true; input.disabled = true; setBtnState(saveBtn,false);
               return;
             }
 
@@ -259,26 +237,16 @@
               updatedAt: new Date().toISOString()
             }, { merge: true });
 
-            // 화면에 값 고정(숫자 유지) + 잠금
-            sel.value = attendance;
-            input.value = attendance==='참석' ? String(countVal) : '';
-            sel.disabled = true;
-            input.disabled = true;
-            setBtnState(saveBtn, false);
-
-            // 임시상태 제거
             delete uiOverride[m.id];
+            alert('저장되었습니다.');
           });
         }
 
-        rows[m.id] = { sel, input, saveBtn };
         memberBody.appendChild(tr);
       });
-
       recomputeStats();
     }
 
-    // 실시간 구독
     members.forEach(m=>{
       onSnapshot(doc(db, COL, String(m.id)), snap=>{
         dbMap[m.id] = snap.exists()? snap.data() : {};
@@ -286,7 +254,6 @@
       });
     });
 
-    // 관리자 전체 초기화 (선택)
     document.getElementById('resetAll').addEventListener('click', async ()=>{
       const pw = prompt('관리자 비밀번호를 입력하세요','');
       if(pw!=='1122'){ alert('비밀번호가 맞지 않습니다.'); return; }
