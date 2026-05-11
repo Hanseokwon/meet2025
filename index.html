@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>2026년 춘계 계모임 참석 현황</title>
+  
+  <title>2026년 춘계 계모임 참석 인원 파악(긴급)</title>
+  <meta property="og:title" content="2026년 춘계 계모임 참석 인원 파악(긴급)" />
+  <meta property="og:description" content="여기를 눌러 링크를 확인하고 참석 여부를 입력해 주세요." />
+
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body { background: linear-gradient(135deg,#eef2ff,#e0e7ff); }
@@ -67,10 +71,10 @@
   </div>
 
   <script type="module">
-    /* ===== 날짜/환경 설정 수정 ===== */
-    const DEADLINE = '2026-05-15'; // 2026년 모임 마감일
-    const CHOSEN_LS = 'meet2026_chosen_member'; // 로컬스토리지 키 변경
-    const COL = 'meeting-data-2026'; // 파이어베이스 컬렉션 변경
+    /* ===== 설정값 (2026년 기준) ===== */
+    const DEADLINE = '2026-05-15'; 
+    const CHOSEN_LS = 'meet2026_chosen_member'; 
+    const COL = 'meeting-data-2026'; 
 
     const today = new Intl.DateTimeFormat('sv-SE', {
       timeZone:'Asia/Seoul', year:'numeric', month:'2-digit', day:'2-digit'
@@ -91,7 +95,7 @@
     }
     function clearChosenLocal(){ localStorage.removeItem(CHOSEN_LS); }
 
-    /* ===== Firebase ===== */
+    /* ===== Firebase (기존 설정 유지) ===== */
     const firebaseConfig = {
       apiKey: "AIzaSyDQhi3QSFY-vE2x75ehBntmjG1BrYIVIH0",
       authDomain: "meet2025-2f126.firebaseapp.com",
@@ -114,22 +118,9 @@
       { id: 13, name: '황두호' }, { id: 14, name: '이성근' }, { id: 15, name: '이경수' }, { id: 16, name: '이경철' }
     ];
 
-    /* ===== 상태 ===== */
     const dbMap = {};     
     const uiOverride = {}; 
-    const rows  = {};     
-
-    const memberBody     = document.getElementById('memberBody');
-    const attendCountEl  = document.getElementById('attendCount');
-    const absentCountEl  = document.getElementById('absentCount');
-    const pendingCountEl = document.getElementById('pendingCount');
-    const totalPeopleEl  = document.getElementById('totalPeople');
-
-    function setBtnState(btn, enabled){
-      btn.disabled = !enabled;
-      btn.classList.toggle('btn-gray', !enabled);
-      btn.classList.toggle('btn-green', enabled);
-    }
+    const memberBody = document.getElementById('memberBody');
 
     function recomputeStats(){
       let a=0,b=0,p=0,t=0;
@@ -140,10 +131,10 @@
         else if(att==='참석'){ a++; t += Number(d.count||0); }
         else if(att==='불참'){ b++; }
       });
-      attendCountEl.textContent = a;
-      absentCountEl.textContent = b;
-      pendingCountEl.textContent = p;
-      totalPeopleEl.textContent = t;
+      document.getElementById('attendCount').textContent = a;
+      document.getElementById('absentCount').textContent = b;
+      document.getElementById('pendingCount').textContent = p;
+      document.getElementById('totalPeople').textContent = t;
     }
 
     function renderRows(){
@@ -153,9 +144,7 @@
       members.forEach((m, idx)=>{
         const d = dbMap[m.id] || {};
         const submittedToday = (d.lastSubmitted === today);
-        const lockedByDB = submittedToday || pastDeadline;
-        const lockedByLocal = chosen && chosen.memberId !== m.id;
-        const rowLocked = lockedByDB || lockedByLocal;
+        const rowLocked = submittedToday || pastDeadline || (chosen && chosen.memberId !== m.id);
 
         const temp = uiOverride[m.id] || {};
         const displayAttendance = rowLocked ? (d.attendance || '') : (temp.attendance ?? '');
@@ -189,7 +178,7 @@
         const input = tr.querySelector('input');
         const saveBtn = tr.querySelector('.saveBtn');
 
-        if(!chosen){
+        if(!chosen && !rowLocked){
           sel.addEventListener('change', ()=>{
             if(sel.value){
               setChosenLocal(m.id);
@@ -200,48 +189,23 @@
         }
 
         if(!rowLocked){
-          sel.addEventListener('change', ()=>{
-            uiOverride[m.id] = uiOverride[m.id] || {};
-            uiOverride[m.id].attendance = sel.value;
-            if(sel.value !== '참석'){ uiOverride[m.id].count = ''; input.value=''; }
-          });
-          input.addEventListener('input', ()=>{
-            uiOverride[m.id] = uiOverride[m.id] || {};
-            if((uiOverride[m.id].attendance || sel.value) === '참석'){
-              uiOverride[m.id].count = input.value;
-            }
-          });
-
           saveBtn.addEventListener('click', async ()=>{
-            if(pastDeadline){ alert('마감일(' + DEADLINE + ') 이후에는 제출할 수 없습니다.'); return; }
+            if(pastDeadline){ alert('마감일이 지났습니다.'); return; }
+            const attendance = sel.value;
+            const countVal = attendance === '참석' ? Number(input.value) : 0;
 
-            const ref = doc(db, COL, String(m.id));
-            const cur = await getDoc(ref);
-            const last = cur.exists()? (cur.data().lastSubmitted||null) : null;
-            if(last === today){
-              alert('이 이름으로는 오늘 이미 제출하셨습니다.');
-              return;
-            }
+            if(!attendance){ alert('참석 여부를 선택해주세요.'); return; }
+            if(attendance==='참석' && countVal < 1){ alert('인원을 입력해주세요.'); return; }
 
-            const attendance = (uiOverride[m.id]?.attendance || sel.value || '');
-            const countVal   = attendance === '참석' ? Number(uiOverride[m.id]?.count || input.value || 0) : 0;
-
-            if(!attendance){ alert('참석/불참을 선택해주세요.'); return; }
-            if(attendance==='참석' && (!countVal || countVal < 1)){ alert('인원을 1 이상 입력해주세요.'); return; }
-
-            await setDoc(ref, {
-              name: m.name,
-              attendance: attendance,
-              count: countVal,
-              lastSubmitted: today,
-              updatedAt: new Date().toISOString()
+            await setDoc(doc(db, COL, String(m.id)), {
+              name: m.name, attendance, count: countVal,
+              lastSubmitted: today, updatedAt: new Date().toISOString()
             }, { merge: true });
 
             delete uiOverride[m.id];
-            alert('저장되었습니다.');
+            alert('입력이 완료되었습니다.');
           });
         }
-
         memberBody.appendChild(tr);
       });
       recomputeStats();
@@ -255,19 +219,12 @@
     });
 
     document.getElementById('resetAll').addEventListener('click', async ()=>{
-      const pw = prompt('관리자 비밀번호를 입력하세요','');
-      if(pw!=='1122'){ alert('비밀번호가 맞지 않습니다.'); return; }
-      if(!confirm('전체 초기화 하시겠습니까?')) return;
-
+      if(prompt('비밀번호')!=='1122') return;
       const batch = writeBatch(db);
-      members.forEach(m=>{
-        batch.set(doc(db, COL, String(m.id)), {
-          attendance: null, count: null, lastSubmitted: null, updatedAt: new Date().toISOString()
-        }, { merge: true });
-      });
+      members.forEach(m=> batch.set(doc(db, COL, String(m.id)), { attendance:null, count:null, lastSubmitted:null }, {merge:true}));
       await batch.commit();
       clearChosenLocal();
-      alert('초기화 완료');
+      location.reload();
     });
   </script>
 </body>
